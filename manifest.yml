@@ -1,0 +1,17 @@
+PLUGIN:
+  name: 'Proxy stuff'
+  source: 'https://github.com/pappnu/proxy_stuff'
+  license: 'MIT'
+
+pw-borderless-vector.psd:
+  name: 'Planeswalker Borderless Vector'
+  id: '1M39vBzfBdd0_7qGiiuztMVSQqOgyS3QG'
+  desc: 'Vectorized version of the Planeswalker Extended template.'
+  templates:
+    Borderless:
+      PlaneswalkerBorderlessTemplate:
+        - planeswalker
+        - pw_tf_front
+        - pw_tf_back
+        - pw_mdfc_front
+        - pw_mdfc_back

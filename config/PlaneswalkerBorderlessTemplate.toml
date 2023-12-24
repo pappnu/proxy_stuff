@@ -1,0 +1,60 @@
+[COLORS]
+title = "Color Options"
+
+[COLORS."Max.Colors"]
+title = "Max Frame Colors"
+desc = """How many colors can the frame split by before the card just becomes Gold?"""
+type = "options"
+default = "2"
+options = ["1", "2", "3", "4", "5"]
+
+[COLORS."Hybrid.Colored"]
+title = "Colored Hybrid Cards"
+desc = """When enabled, hybrid cards will have blended name plate colors."""
+type = "bool"
+default = 1
+
+[COLORS."Front.Face.Colors"]
+title = "Authentic Front Face Colors"
+desc = """When enabled, front face MDFC and Transform cards will have authentic lighter colors."""
+type = "bool"
+default = 1
+
+[COLORS."Multicolor.Twins"]
+title = "Multicolor Twins"
+desc = """When enabled, the Name and Type boxes on multicolor cards will use blended colors instead of Gold."""
+type = "bool"
+default = 1
+
+[COLORS."Color.Textbox"]
+title = "Colored Textbox"
+desc = """When enabled, the Textbox will be colored based on the card's color identity."""
+type = "bool"
+default = 1
+
+[COLORS."Multicolor.Textbox"]
+title = "Multicolor Textbox"
+desc = """When enabled, the Textbox on multicolor cards will use blended colors instead of Gold."""
+type = "bool"
+default = 1
+
+[COLORS."Multicolor.Pinlines"]
+title = "Multicolor Pinlines"
+desc = """When enabled, the Pinlines and Legendary Crown on multicolor cards will use blended colors instead of Gold."""
+type = "bool"
+default = 1
+
+[SHADOWS]
+title = "Shadow Options"
+
+[SHADOWS."Drop.Shadow"]
+title = "Text Drop Shadow"
+desc = """When enabled, bright card text will have a drop shadow."""
+type = "bool"
+default = 1
+
+[SHADOWS."Bottom.Shadow"]
+title = "Bottom Shadow"
+desc = """When enabled, a shadow is added at the bottom edge of the card."""
+type = "bool"
+default = 1
