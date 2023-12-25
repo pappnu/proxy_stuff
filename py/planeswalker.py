@@ -405,7 +405,7 @@ class PlaneswalkerBorderlessVector(
     def pinlines_vector_mask(self) -> dict[str, Any]:
         """This mask hides undesired layer effects."""
         return {
-            "vector": psd.getLayer(
+            "mask": psd.getLayer(
                 LAYERS.TRANSFORM_FRONT
                 if self.is_transform and self.is_front
                 else LAYERS.TRANSFORM
@@ -413,6 +413,7 @@ class PlaneswalkerBorderlessVector(
                 else LAYERS.NORMAL,
                 [self.mask_group, self.textbox_size],
             ),
+            "vector": True,
             "layer": psd.getLayerSet(LAYERS.SHAPE, self.pinlines_group),
             "funcs": [apply_vector_mask_to_layer_fx],
         }
@@ -421,7 +422,8 @@ class PlaneswalkerBorderlessVector(
     def mdfc_pinlines_mask(self) -> dict[str, Any]:
         """This mask hides pinlines below the MDFC bottom box."""
         return {
-            "vector": psd.getLayer("MDFC Bottom", self.mask_group),
+            "mask": psd.getLayer("MDFC Bottom", self.mask_group),
+            "vector": True,
             "layer": psd.getLayerSet(
                 self.textbox_size, [self.pinlines_group, LAYERS.SHAPE]
             ),
@@ -431,7 +433,8 @@ class PlaneswalkerBorderlessVector(
     def transform_arrow_textbox_pinlines_mask(self) -> dict[str, Any]:
         """This mask hides the textbox stroke from where the transform arrow is."""
         return {
-            "vector": psd.getLayer(LAYER_NAMES.ARROW, self.mask_group),
+            "mask": psd.getLayer(LAYER_NAMES.ARROW, self.mask_group),
+            "vector": True,
             "layer": psd.getLayerSet(
                 self.textbox_size, [self.pinlines_group, LAYERS.TEXTBOX]
             ),
