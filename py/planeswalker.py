@@ -1,10 +1,20 @@
 from typing import Any, Optional
 
-from photoshop.api import ActionDescriptor, ActionReference, DialogModes, SolidColor
+from photoshop.api import (
+    ActionDescriptor,
+    ActionReference,
+    DialogModes,
+    ElementPlacement,
+    SolidColor,
+)
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
 import src.helpers as psd
+from plugins.proxy_stuff.py.helpers import (
+    create_vector_mask_from_shape,
+    subtract_front_shape,
+)
 from src import APP, CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
@@ -404,15 +414,37 @@ class PlaneswalkerBorderlessVector(
     @auto_prop_cached
     def pinlines_vector_mask(self) -> dict[str, Any]:
         """This mask hides undesired layer effects."""
+
+        # Build the shape
+        base_shape = psd.getLayer("Base", self.mask_group)
+        namebox = self.namebox_shape.duplicate(base_shape, ElementPlacement.PlaceBefore)
+        typeline = self.typebox_shape.duplicate(
+            base_shape, ElementPlacement.PlaceBefore
+        )
+        textbox = psd.getLayer(LAYERS.TEXTBOX, self.textbox_size_group).duplicate(
+            base_shape, ElementPlacement.PlaceBefore
+        )
+        parts: list[ArtLayer] = [namebox, typeline, textbox]
+        if self.is_transform and self.is_front:
+            parts.append(
+                self.pinlines_arrow.duplicate(base_shape, ElementPlacement.PlaceBefore)
+            )
+        # The shapes have to be subtracted in bottom up order
+        for layer in reversed(parts):
+            base_shape = subtract_front_shape(base_shape, layer)
+
+        # Create vector mask fails if the layer isn't visible
+        self.mask_group.visible = True
+        mask = create_vector_mask_from_shape(
+            psd.create_new_layer("Pinlines"), base_shape
+        )
+        self.mask_group.visible = False
+
+        # Cleanup
+        base_shape.remove()
+
         return {
-            "mask": psd.getLayer(
-                LAYERS.TRANSFORM_FRONT
-                if self.is_transform and self.is_front
-                else LAYERS.TRANSFORM
-                if self.is_mdfc or self.is_transform
-                else LAYERS.NORMAL,
-                [self.mask_group, self.textbox_size],
-            ),
+            "mask": mask,
             "vector": True,
             "layer": psd.getLayerSet(LAYERS.SHAPE, self.pinlines_group),
             "funcs": [apply_vector_mask_to_layer_fx],
