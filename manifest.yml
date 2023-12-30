@@ -8,7 +8,7 @@ pw-borderless-vector.psd:
   id: '1M39vBzfBdd0_7qGiiuztMVSQqOgyS3QG'
   desc: 'Vectorized version of the Planeswalker Extended template.'
   templates:
-    Borderless:
+    Borderless Vector:
       PlaneswalkerBorderlessTemplate:
         - planeswalker
         - pw_tf_front

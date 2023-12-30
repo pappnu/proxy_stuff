@@ -20,7 +20,7 @@ from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
 from src.frame_logic import contains_frame_colors
 from src.templates import (
-    PlaneswalkerExtendedTemplate,
+    PlaneswalkerBorderlessTemplate,
     VectorBorderlessMod,
     VectorTemplate,
 )
@@ -46,7 +46,7 @@ class PlaneswalkerBorderlessVector(
     VectorMDFCMod,
     VectorTransformMod,
     VectorTemplate,
-    PlaneswalkerExtendedTemplate,
+    PlaneswalkerBorderlessTemplate,
 ):
     """
     SETTINGS
@@ -322,7 +322,7 @@ class PlaneswalkerBorderlessVector(
 
     @auto_prop_cached
     def textbox_reference(self) -> Optional[ArtLayer]:
-        return psd.getLayer(
+        return psd.get_reference_layer(
             LAYERS.TEXTBOX_REFERENCE + " MDFC"
             if self.is_mdfc
             else LAYERS.TEXTBOX_REFERENCE,

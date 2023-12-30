@@ -1,4 +1,4 @@
-from photoshop.api import ActionDescriptor, DialogModes
+from photoshop.api import ActionDescriptor, ActionReference, DialogModes
 from photoshop.api._artlayer import ArtLayer
 
 import src.helpers as psd
@@ -35,6 +35,18 @@ def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:
     return APP.activeDocument.activeLayer
 
 
+def select_path_component_select_tool():
+    """
+    Selects the path component selection tool in Photoshop.
+    """
+    desc = ActionDescriptor()
+    ref = ActionReference()
+    ref.putClass(sID("pathComponentSelectTool"))
+    desc.putReference(cID("null"), ref)
+    desc.putBoolean(sID("dontRecord"), True)
+    APP.executeAction(cID("slct"), desc, NO_DIALOG)
+
+
 def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
     """
     Adds the given shape as a vector mask to layer.
@@ -45,6 +57,7 @@ def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
         The layer that the mask was applied to.
     """
     psd.select_layer(shape)
+    select_path_component_select_tool()
     copy()
     psd.select_layer(layer)
     paste()
