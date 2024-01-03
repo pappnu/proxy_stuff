@@ -168,27 +168,27 @@ class PlaneswalkerBorderlessVector(
     @auto_prop_cached
     def dark_color_map(self) -> dict[str, str]:
         return {
-            "W": "958676",
-            "U": "045482",
-            "B": "282523",
-            "R": "93362a",
-            "G": "134f23",
-            "Gold": "9a883f",
-            "Hybrid": "a79c8e",
-            "Colorless": "74726b",
+            "W": "#958676",
+            "U": "#045482",
+            "B": "#282523",
+            "R": "#93362a",
+            "G": "#134f23",
+            "Gold": "#9a883f",
+            "Hybrid": "#a79c8e",
+            "Colorless": "#74726b",
         }
 
     @auto_prop_cached
     def light_color_map(self) -> dict[str, str]:
         return {
-            "W": "faf8f2",
-            "U": "d2edfa",
-            "B": "c9c2be",
-            "R": "f8c7b0",
-            "G": "dbfadc",
-            "Gold": "f5e5a4",
-            "Hybrid": "f0ddce",
-            "Colorless": "e2d8d4",
+            "W": "#faf8f2",
+            "U": "#d2edfa",
+            "B": "#c9c2be",
+            "R": "#f8c7b0",
+            "G": "#dbfadc",
+            "Gold": "#f5e5a4",
+            "Hybrid": "#f0ddce",
+            "Colorless": "#e2d8d4",
         }
 
     @auto_prop_cached
@@ -233,7 +233,9 @@ class PlaneswalkerBorderlessVector(
         colors = self.twins
 
         # Hybrid OR color enabled multicolor
-        if self.is_hybrid or (self.is_multicolor and self.multicolor_textbox):
+        if self.colored_textbox and (
+            self.is_hybrid or (self.is_multicolor and self.multicolor_textbox)
+        ):
             colors = self.identity
 
         # Return Solid Color or Gradient notation
@@ -290,6 +292,21 @@ class PlaneswalkerBorderlessVector(
                 LAYER_NAMES.ABILITY_DIVIDERS,
             ],
         )
+    
+    @auto_prop_cached
+    def dfc_group(self) -> Optional[LayerSet]:
+        layer_name = None
+        layer_path: list[str] = [LAYERS.TEXT_AND_ICONS]
+        if self.is_mdfc:
+            layer_name = LAYERS.MDFC_FRONT if self.is_front else LAYERS.MDFC_BACK
+        elif self.is_transform:
+            layer_path.append(LAYERS.TRANSFORM)
+            layer_name = LAYERS.FRONT if self.is_front else LAYERS.BACK
+        if layer_name:
+            return psd.getLayerSet(
+                layer_name,
+                layer_path,
+            )
 
     """
     BASIC LAYERS
@@ -512,13 +529,8 @@ class PlaneswalkerBorderlessVector(
     """
 
     def enable_frame_layers(self) -> None:
-        """Build the card frame by enabling and/or creating various layer."""
-
-        # Enable vector shapes
-        self.enable_shape_layers()
-
-        # Enable layer masks
-        self.enable_layer_masks()
+        # VectorTemplate and PlaneswalkerBorderlessTemplate have conflicting textbox_group usage
+        # super().enable_frame_layers()
 
         # Sahdow
         if self.bottom_shadow_enabled:
@@ -527,26 +539,40 @@ class PlaneswalkerBorderlessVector(
         # Enable text and icons
         self.text_group.visible = True
 
-        # Color Indicator -> Blended solid color layers
+        # Enable vector shapes
+        self.enable_shape_layers()
+
+        # Enable layer masks
+        self.enable_layer_masks()
+
+        # Color Indicator
         if self.is_type_shifted and self.indicator_group:
-            self.create_blended_solid_color(
+            self.generate_layer(
                 group=self.indicator_group,
                 colors=self.indicator_colors,
                 masks=self.indicator_masks,
             )
 
-        # Pinlines -> Solid color or gradient layers
+        # Pinlines
         for group in [g for g in self.pinlines_groups if g]:
             group.visible = True
-            self.pinlines_action(self.pinlines_colors, layer=group)
+            self.generate_layer(
+                group=group, colors=self.pinlines_colors, masks=self.pinlines_masks
+            )
 
-        # Twins -> Solid color or gradient layer
-        if self.twins_group:
-            self.twins_action(self.twins_colors, layer=self.twins_group)
+        # Twins
+        self.generate_layer(
+            group=self.twins_group,
+            colors=self.twins_colors,
+            masks=self.twins_masks,
+        )
 
-        # Textbox -> Solid color or gradient layer
-        if self.colored_textbox and self.textbox_group:
-            self.textbox_action(self.textbox_colors, layer=self.textbox_root_group)
+        # Textbox
+        self.generate_layer(
+            group=self.textbox_root_group,
+            colors=self.textbox_colors,
+            masks=self.textbox_masks,
+        )
 
     def pw_text_layers(self) -> None:
         # Add drop shadow if enabled and allowed
@@ -605,10 +631,6 @@ class PlaneswalkerBorderlessVector(
     """
 
     @auto_prop_cached
-    def transform_circle_layer(self) -> Optional[LayerSet]:
-        return psd.getLayerSet(LAYERS.TRANSFORM, LAYERS.TEXT_AND_ICONS)
-
-    @auto_prop_cached
     def pinlines_arrow(self) -> Optional[ArtLayer]:
         return psd.getLayer(
             LAYER_NAMES.ARROW,
@@ -643,11 +665,6 @@ class PlaneswalkerBorderlessVector(
     """
     MDFC
     """
-
-    @auto_prop_cached
-    def dfc_group(self) -> Optional[LayerSet]:
-        if self.face_type:
-            return psd.getLayerSet(self.face_type, LAYERS.TEXT_AND_ICONS)
 
     def text_layers_mdfc_front(self) -> None:
         super().text_layers_mdfc_front()
