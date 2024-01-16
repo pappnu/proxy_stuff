@@ -228,19 +228,16 @@ class PlaneswalkerBorderlessVector(
         )
 
     @auto_prop_cached
-    def textbox_colors(self) -> SolidColor | list[dict[str, Any]]:
-        # Default to twins
-        colors = self.twins
+    def textbox_colors(self) -> SolidColor | list[dict[str, Any]] | None:
+        # Non-colored textbox
+        if not (self.colored_textbox and (
+            self.is_hybrid or (self.is_multicolor and self.multicolor_textbox)
+        )):
+            return
 
         # Hybrid OR color enabled multicolor
-        if self.colored_textbox and (
-            self.is_hybrid or (self.is_multicolor and self.multicolor_textbox)
-        ):
-            colors = self.identity
-
-        # Return Solid Color or Gradient notation
         return psd.get_pinline_gradient(
-            colors=colors,
+            colors=self.identity,
             color_map=self.light_color_map
             if self.is_authentic_front
             else self.dark_color_map,
