@@ -257,7 +257,7 @@ class PlaneswalkerBorderlessVector(
                 if not contains_frame_colors(self.pinlines)
                 else LAYERS.GOLD
             ),
-            color_map=self.pinline_color_map,
+            color_map=self.pinlines_color_map,
             location_map=self.gradient_location_map,
         )
 
