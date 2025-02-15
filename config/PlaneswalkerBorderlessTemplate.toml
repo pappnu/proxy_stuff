@@ -58,3 +58,12 @@ title = "Bottom Shadow"
 desc = """When enabled, a shadow is added at the bottom edge of the card."""
 type = "bool"
 default = 1
+
+[OTHER]
+title = "Other Options"
+
+[OTHER."Copy.Art"]
+title = "Copy art from backup"
+desc = "When enabled, copies artwork and channels from a chosen backup template."
+type = "bool"
+default = 0

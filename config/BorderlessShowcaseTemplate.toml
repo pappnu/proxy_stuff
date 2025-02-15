@@ -1,0 +1,47 @@
+[COLORS]
+title = "Color Options"
+
+[COLORS."Max.Colors"]
+title = "Max Frame Colors"
+desc = """How many colors can the frame split by before the card just becomes Gold?"""
+type = "options"
+default = "2"
+options = ["1", "2", "3", "4", "5"]
+
+[COLORS."Front.Face.Colors"]
+title = "Authentic Front Face Colors"
+desc = """When enabled, front face MDFC and Transform cards will have authentic lighter colors."""
+type = "bool"
+default = 1
+
+[COLORS."Multicolor.Pinlines"]
+title = "Multicolor Pinlines"
+desc = """When enabled, the Pinlines on multicolor cards will use blended colors instead of Gold."""
+type = "bool"
+default = 1
+
+[SHAPES]
+title = "Shape Options"
+
+[SHAPES."PT.Box.And.Pinline"]
+title = "PT Box and Bottom Pinline"
+desc = """The type of the Power and Toughness Box and Bottom Pinline."""
+type = "options"
+default = "Full"
+options = ["Full", "Partial", "Split"]
+
+[SHAPES."Bottom.Border"]
+title = "Bottom Border"
+desc = """The type of the bottom border."""
+type = "options"
+default = "Full"
+options = ["Full", "Fade", "Shadow", "None"]
+
+[OTHER]
+title = "Other Options"
+
+[OTHER."Copy.Art"]
+title = "Copy art from backup"
+desc = "When enabled, copies artwork and channels from a chosen backup template."
+type = "bool"
+default = 0
