@@ -37,6 +37,7 @@ class LAYER_NAMES(StrEnum):
     ARROW = "Arrow"
     ABILITY_DIVIDERS = "Ability Dividers"
     SHADOW = "Shadow"
+    PW = "pw"
     PW3 = "pw-3"
     PW4 = "pw-4"
 

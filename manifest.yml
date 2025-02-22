@@ -29,3 +29,8 @@ borderless-showcase.psd:
         - mdfc_front
         - mdfc_back
         - mutate
+        - planeswalker
+        - pw_tf_front
+        - pw_tf_back
+        - pw_mdfc_front
+        - pw_mdfc_back
