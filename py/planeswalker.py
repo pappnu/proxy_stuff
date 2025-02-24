@@ -13,7 +13,7 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
 import src.helpers as psd
-from plugins.proxy_stuff.py.helpers import (
+from .helpers import (
     create_vector_mask_from_shape,
     subtract_front_shape,
 )
