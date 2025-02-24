@@ -20,6 +20,15 @@ desc = """When enabled, the Pinlines on multicolor cards will use blended colors
 type = "bool"
 default = 1
 
+[TEXT]
+title = "Text Options"
+
+[TEXT.Nickname]
+title = "Use Nickname"
+desc = """When enabled, card will be rendered with both a 'real' name and a 'nickname' you can enter manually."""
+type = "bool"
+default = 0
+
 [SHAPES]
 title = "Shape Options"
 
