@@ -19,7 +19,7 @@ pw-borderless-vector.psd:
 borderless-showcase.psd:
   name: 'Borderless Showcase'
   id: '1An_qmJIrg8o7lyrhA0NhV6MGe0IA5Cma'
-  desc: 'Borderless template in the vein of the official Japanese Showcase cards.'
+  desc: 'Borderless template in the vein of the official Japan Showcase cards.'
   templates:
     Borderless Showcase:
       BorderlessShowcaseTemplate:
@@ -34,3 +34,5 @@ borderless-showcase.psd:
         - pw_tf_back
         - pw_mdfc_front
         - pw_mdfc_back
+        - saga
+        - class

@@ -36,6 +36,7 @@ NO_DIALOG = DialogModes.DisplayNoDialogs
 class LAYER_NAMES(StrEnum):
     ARROW = "Arrow"
     ABILITY_DIVIDERS = "Ability Dividers"
+    ICON = "Icon"
     SHADOW = "Shadow"
     PW = "pw"
     PW3 = "pw-3"
