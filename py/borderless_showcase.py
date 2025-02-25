@@ -4,6 +4,8 @@ from typing import Any, Callable, Literal
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
+from src.layouts import SagaLayout
+
 from .planeswalker import LAYER_NAMES
 from src import CFG
 from src.enums.adobe import Dimensions
@@ -80,6 +82,11 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     @cached_property
     def is_planeswalker(self) -> bool:
         return hasattr(self.layout, "pw_size")
+    
+    # TODO remove this once is_layout_saga has been marked as property on Proxyshop's side
+    @cached_property
+    def is_layout_saga(self) -> bool:
+        return isinstance(self.layout, SagaLayout)
 
     @cached_property
     def is_pt_enabled(self) -> bool:
