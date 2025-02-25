@@ -1,8 +1,8 @@
 from pathlib import Path
 from photoshop.api._artlayer import ArtLayer
-from plugins.proxy_stuff.py.borderless_showcase import BorderlessShowcase
-from plugins.proxy_stuff.py.planeswalker import PlaneswalkerBorderlessVector
-from plugins.proxy_stuff.py.restore import load_backup_artwork
+from .borderless_showcase import BorderlessShowcase
+from .planeswalker import PlaneswalkerBorderlessVector
+from .restore import load_backup_artwork
 from src.utils.adobe import ReferenceLayer
 
 
