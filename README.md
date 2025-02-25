@@ -13,6 +13,7 @@ A plugin for additional Proxyshop templates.
     cd "/path/to/your/MTG-Proxyshop/plugins"
     git clone --depth 1 https://github.com/pappnu/proxy_stuff.git
     ```
+    or download and extract the folder in [this archive](https://github.com/pappnu/proxy_stuff/archive/refs/heads/main.zip) to your plugins folder. Rename the extracted folder as `proxy_stuff`.
 2. Download the templates via Proxyshop's updater.
 
 ## Licence
