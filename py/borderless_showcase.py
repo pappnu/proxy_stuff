@@ -4,7 +4,7 @@ from typing import Any, Callable, Literal
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
-from plugins.proxy_stuff.py.planeswalker import LAYER_NAMES
+from .planeswalker import LAYER_NAMES
 from src import CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
@@ -248,6 +248,10 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             [_shape_group, LAYERS.NAME],
         ):
             layers.append(layer)
+
+        # Add nickname pinlines if required
+        if self.is_nickname:
+            layers.append(getLayerSet(LAYERS.NICKNAME, _shape_group))
 
         if self.is_planeswalker:
             if layer := getLayerSet(self.size, _shape_group):
