@@ -287,6 +287,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     @cached_property
     def crown_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
         return None
+    
+    def enable_crown(self) -> None:
+        pass
 
     @cached_property
     def enabled_shapes(self) -> list[ArtLayer | LayerSet | None]:
