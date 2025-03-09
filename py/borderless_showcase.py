@@ -145,6 +145,8 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     def pt_colors(self) -> list[int] | list[dict[str, Any]]:
         return self.pinlines_colors
 
+    _gradient_start_location: float = 0.05
+
     @cached_property
     def pinlines_colors(self) -> list[int] | list[dict[str, Any]]:
         if override := self.pinlines_color_override:
@@ -154,8 +156,22 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
                 i = str(idx)
                 colors += i
                 color_map[i] = color
+
+            location_map: dict[int, list[int | float]] | None = None
+            if (steps := len(colors)) > 5:
+                gradient_end_location = 1 - self._gradient_start_location
+                locations: list[int | float] = [self._gradient_start_location]
+                steps_between = (steps - 2) * 2 + 1
+                step = (gradient_end_location - self._gradient_start_location) / (
+                    (steps - 2) * 2 + 1
+                )
+                for i in range(steps_between - 1):
+                    locations.append(locations[i] + step)
+                locations.append(gradient_end_location)
+                location_map = {steps: locations}
+
             return get_pinline_gradient(
-                colors=colors, color_map=color_map, location_map=None
+                colors=colors, color_map=color_map, location_map=location_map
             )
         return super().pinlines_colors
 
