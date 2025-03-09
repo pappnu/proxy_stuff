@@ -1,9 +1,11 @@
 from functools import cached_property
 from typing import Any, Callable, Literal
 
+from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
+from plugins.proxy_stuff.py.helpers import is_hex_color
 from src.layouts import SagaLayout
 
 from .planeswalker import LAYER_NAMES
@@ -11,7 +13,12 @@ from src import CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
 from src.helpers.bounds import get_layer_dimensions
-from src.helpers.colors import get_rgb, rgb_white
+from src.helpers.colors import (
+    get_pinline_gradient,
+    get_rgb,
+    get_rgb_from_hex,
+    rgb_white,
+)
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask, copy_layer_mask
@@ -75,6 +82,24 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             return None
         raise ValueError(f"Received invalid value for bottom border type: {setting}")
 
+    @cached_property
+    def pinlines_color_override(self) -> list[SolidColor]:
+        colors: list[SolidColor] = []
+        if (
+            setting := CFG.get_setting(
+                section="COLORS", key="Pinlines.Override", default=None, is_bool=False
+            )
+        ) and isinstance(setting, str):
+            parts = setting.split(",")
+            for part in parts:
+                if is_hex_color(part):
+                    colors.append(get_rgb_from_hex(part))
+                else:
+                    self.console.update(
+                        f"WARNING: Encountered non-hexadecimal color override: {part}"
+                    )
+        return colors
+
     """
     * Checks
     """
@@ -82,7 +107,7 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     @cached_property
     def is_planeswalker(self) -> bool:
         return hasattr(self.layout, "pw_size")
-    
+
     # TODO remove this once is_layout_saga has been marked as property on Proxyshop's side
     @cached_property
     def is_layout_saga(self) -> bool:
@@ -119,6 +144,20 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     @cached_property
     def pt_colors(self) -> list[int] | list[dict[str, Any]]:
         return self.pinlines_colors
+
+    @cached_property
+    def pinlines_colors(self) -> list[int] | list[dict[str, Any]]:
+        if override := self.pinlines_color_override:
+            colors = ""
+            color_map: dict[str, SolidColor] = {}
+            for idx, color in enumerate(override):
+                i = str(idx)
+                colors += i
+                color_map[i] = color
+            return get_pinline_gradient(
+                colors=colors, color_map=color_map, location_map=None
+            )
+        return super().pinlines_colors
 
     """
     * Groups
@@ -287,7 +326,7 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     @cached_property
     def crown_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
         return None
-    
+
     def enable_crown(self) -> None:
         pass
 

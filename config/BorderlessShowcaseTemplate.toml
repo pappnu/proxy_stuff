@@ -20,6 +20,12 @@ desc = """When enabled, the Pinlines on multicolor cards will use blended colors
 type = "bool"
 default = 1
 
+[COLORS."Pinlines.Override"]
+title = "Pinlines color override"
+desc = """Override pinline colors with given colors. Specify as a list of hex color codes separated by commas, e.g. '#ffffff,#000000'."""
+type = "string"
+default = ""
+
 [TEXT]
 title = "Text Options"
 

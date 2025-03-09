@@ -1,3 +1,5 @@
+from functools import cached_property
+import re
 from photoshop.api import ActionDescriptor, ActionReference, DialogModes
 from photoshop.api._artlayer import ArtLayer
 
@@ -6,6 +8,19 @@ from src import APP
 
 sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 NO_DIALOG = DialogModes.DisplayNoDialogs
+
+
+class _LazyValues:
+    @cached_property
+    def hex_color_regex(self):
+        return re.compile(r"^#(?:[0-9a-fA-F]{3}){1,2}$")
+
+
+lazy_values = _LazyValues()
+
+
+def is_hex_color(value: str) -> re.Match[str] | None:
+    return lazy_values.hex_color_regex.match(value)
 
 
 def copy():
