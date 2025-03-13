@@ -26,6 +26,44 @@ desc = """Override pinline colors with given colors. Specify as a list of hex co
 type = "string"
 default = ""
 
+[COLORS."Expansion.Symbol.Override"]
+title = "Expansion symbol color override"
+desc = """Override expansion symbol color gradient."""
+type = "options"
+options = ["Off", "Identity", "Pinlines override", "Custom"]
+default = "Off"
+
+[COLORS."Expansion.Symbol.Custom"]
+title = "Expansion symbol custom colors"
+desc = """Custom colors for expansion symbol. Specify as a list of hex color codes separated by commas, e.g. '#ffffff,#000000'."""
+type = "string"
+default = ""
+
+[COLORS."Expansion.Symbol.Darken"]
+title = "Darken expansion symbol gradient ends"
+desc = """Darkens the first and last override color in the expansion symbol gradient. Specify as a value between 0-100."""
+type = "numeric"
+default = 0
+
+[COLORS."Expansion.Symbol.Angle"]
+title = "Expansion symbol gradient angle"
+desc = """The angle to use for the expansion symbol color gradient. Specify as a value between -360-360."""
+type = "numeric"
+default = -45
+
+[COLORS."Expansion.Symbol.Scale"]
+title = "Expansion symbol gradient scale"
+desc = """The scale to use for the expansion symbol color gradient. Specify as a value between 10-150."""
+type = "numeric"
+default = 70
+
+[COLORS."Expansion.Symbol.Method"]
+title = "Expansion symbol gradient method"
+desc = """The method to use for the expansion symbol color gradient."""
+type = "options"
+options = ["perceptual", "linear", "classic", "smooth", "stripes"]
+default = "linear"
+
 [TEXT]
 title = "Text Options"
 

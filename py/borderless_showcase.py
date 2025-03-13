@@ -1,28 +1,26 @@
+from enum import Enum
 from functools import cached_property
+from math import ceil
 from typing import Any, Callable, Literal
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
-from plugins.proxy_stuff.py.helpers import is_hex_color
-from src.layouts import SagaLayout
-
+from .helpers import get_numeric_setting, is_color_identity, parse_hex_color_list
 from .planeswalker import LAYER_NAMES
+from src.enums.mtg import Rarity
+from src.layouts import SagaLayout
+from src.schema.colors import ColorObject, GradientColor
 from src import CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
 from src.helpers.bounds import get_layer_dimensions
-from src.helpers.colors import (
-    get_pinline_gradient,
-    get_rgb,
-    get_rgb_from_hex,
-    rgb_white,
-)
+from src.helpers.colors import get_color, get_pinline_gradient, get_rgb, rgb_white
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask, copy_layer_mask
-from src.schema.adobe import EffectStroke
+from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
 from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.planeswalker import PlaneswalkerMod
@@ -30,6 +28,13 @@ from src.templates.saga import SagaMod
 from src.templates.transform import TransformMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
+
+
+class ExpansionSymbolOverrideMode(Enum):
+    Off = 0
+    Identity = 1
+    Pinlines = 2
+    Custom = 3
 
 
 class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, SagaMod):
@@ -84,21 +89,75 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
 
     @cached_property
     def pinlines_color_override(self) -> list[SolidColor]:
-        colors: list[SolidColor] = []
         if (
             setting := CFG.get_setting(
                 section="COLORS", key="Pinlines.Override", default=None, is_bool=False
             )
         ) and isinstance(setting, str):
-            parts = setting.split(",")
-            for part in parts:
-                if is_hex_color(part):
-                    colors.append(get_rgb_from_hex(part))
-                else:
-                    self.console.update(
-                        f"WARNING: Encountered non-hexadecimal color override: {part}"
-                    )
-        return colors
+            return parse_hex_color_list(setting, self.console)
+        return []
+
+    @cached_property
+    def expansion_symbol_color_override(self) -> ExpansionSymbolOverrideMode:
+        if (
+            setting := CFG.get_setting(
+                section="COLORS",
+                key="Expansion.Symbol.Override",
+                default=None,
+                is_bool=False,
+            )
+        ) and isinstance(setting, str):
+            if setting == "Identity":
+                return ExpansionSymbolOverrideMode.Identity
+            if setting == "Pinlines override":
+                return ExpansionSymbolOverrideMode.Pinlines
+            if setting == "Custom":
+                return ExpansionSymbolOverrideMode.Custom
+        return ExpansionSymbolOverrideMode.Off
+
+    @cached_property
+    def expansion_symbol_custom_colors(self) -> list[SolidColor]:
+        if (
+            setting := CFG.get_setting(
+                section="COLORS",
+                key="Expansion.Symbol.Custom",
+                default=None,
+                is_bool=False,
+            )
+        ) and isinstance(setting, str):
+            return parse_hex_color_list(setting, self.console)
+        return []
+
+    @cached_property
+    def darken_exnapsion_symbol_gradient_endpoints(self) -> float:
+        return get_numeric_setting(
+            CFG, "COLORS", "Expansion.Symbol.Darken", 0, (0, 100)
+        )
+
+    @cached_property
+    def expansion_symbol_gradient_angle(self) -> float:
+        return get_numeric_setting(
+            CFG, "COLORS", "Expansion.Symbol.Angle", 0, (-360, 360)
+        )
+
+    @cached_property
+    def expansion_symbol_gradient_scale(self) -> float:
+        return get_numeric_setting(
+            CFG, "COLORS", "Expansion.Symbol.Scale", 70, (10, 150)
+        )
+
+    @cached_property
+    def expansion_symbol_gradient_method(self) -> str:
+        if (
+            setting := CFG.get_setting(
+                section="COLORS",
+                key="Expansion.Symbol.Method",
+                default=None,
+                is_bool=False,
+            )
+        ) and isinstance(setting, str):
+            return setting
+        return "linear"
 
     """
     * Checks
@@ -136,6 +195,16 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
                 return LAYER_NAMES.PW4
             return LAYER_NAMES.PW3
         return super().size
+
+    def override_set_symbol(self) -> None:
+        if self.expansion_symbol_color_override:
+            # Common symbol is used since it can be inverted to get
+            # a white symbol with black lines, which is easy to tint with other colors
+            self.layout.rarity_letter = Rarity.C[0].upper()
+
+    @property
+    def pre_render_methods(self) -> list[Callable[[], None]]:
+        return [*super().pre_render_methods, self.override_set_symbol]
 
     """
     * Colors
@@ -404,9 +473,71 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
                 self.expansion_symbol_layer.visible = False
                 return None
 
+            effects: list[LayerEffects] = [EffectStroke(weight=7, style="out")]
+
+            # Expansion symbol color gradient override
+            if mode := self.expansion_symbol_color_override:
+                self.expansion_symbol_layer.invert()
+
+                step: int | float
+                colors: list[ColorObject]
+
+                if mode is ExpansionSymbolOverrideMode.Identity:
+                    if (len_identity := len(self.identity)) > 1 and is_color_identity(
+                        self.identity
+                    ):
+                        # For some reason the gradient locations are specified on
+                        # a scale of 0-4096 even though in the UI they are specified as 0-100
+                        step = 4096 / ((len_identity - 1) or 1)
+                        colors = [
+                            self.pinlines_color_map[color] for color in self.identity
+                        ]
+
+                    else:
+                        step = 2048
+                        colors = [self.pinlines_color_map[self.identity]] * 3
+                elif mode is ExpansionSymbolOverrideMode.Pinlines:
+                    step = 4096 / ((len(self.pinlines_color_override) - 1) or 1)
+                    colors = [*self.pinlines_color_override]
+                else:
+                    step = 4096 / ((len(self.expansion_symbol_custom_colors) - 1) or 1)
+                    colors = [*self.expansion_symbol_custom_colors]
+
+                if colors:
+                    # Optional darken
+                    if self.darken_exnapsion_symbol_gradient_endpoints:
+                        if len(colors) == 1:
+                            colors = colors * 3
+
+                        for accessor in (0, -1):
+                            color = get_color(colors[accessor])
+                            color.hsb.brightness -= (
+                                self.darken_exnapsion_symbol_gradient_endpoints
+                            )
+                            colors[accessor] = color
+
+                    effects.append(
+                        EffectGradientOverlay(
+                            colors=[
+                                GradientColor(
+                                    color=color,
+                                    location=ceil(idx * step),
+                                )
+                                for idx, color in enumerate(colors)
+                            ],
+                            blend_mode="multiply",
+                            dither=True,
+                            rotation=self.expansion_symbol_gradient_angle,
+                            opacity=100,
+                            scale=self.expansion_symbol_gradient_scale,
+                            # TODO fix typing once pull request is accepted
+                            method=self.expansion_symbol_gradient_method,
+                        )
+                    )
+
             apply_fx(
                 self.expansion_symbol_layer,
-                [EffectStroke(weight=7, style="out")],
+                effects,
             )
 
     def format_nickname_text(self) -> None:
