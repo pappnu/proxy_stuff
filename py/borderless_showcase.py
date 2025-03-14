@@ -7,7 +7,7 @@ from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
-from .helpers import get_numeric_setting, is_color_identity, parse_hex_color_list
+from .helpers import copy_color, get_numeric_setting, is_color_identity, parse_hex_color_list
 from .planeswalker import LAYER_NAMES
 from src.enums.mtg import Rarity
 from src.layouts import SagaLayout
@@ -16,7 +16,7 @@ from src import CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
 from src.helpers.bounds import get_layer_dimensions
-from src.helpers.colors import get_color, get_pinline_gradient, get_rgb, rgb_white
+from src.helpers.colors import get_pinline_gradient, get_rgb, rgb_white
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask, copy_layer_mask
@@ -507,10 +507,11 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
                     # Optional darken
                     if self.darken_exnapsion_symbol_gradient_endpoints:
                         if len(colors) == 1:
+                            step = 2048
                             colors = colors * 3
 
                         for accessor in (0, -1):
-                            color = get_color(colors[accessor])
+                            color = copy_color(colors[accessor])
                             color.hsb.brightness -= (
                                 self.darken_exnapsion_symbol_gradient_endpoints
                             )

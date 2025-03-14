@@ -8,7 +8,8 @@ from src.console import TerminalConsole
 from src.gui.console import GUIConsole
 import src.helpers as psd
 from src import APP
-from src.helpers.colors import get_rgb_from_hex
+from src.helpers.colors import get_color, get_rgb_from_hex
+from src.schema.colors import ColorObject
 
 sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 NO_DIALOG = DialogModes.DisplayNoDialogs
@@ -76,6 +77,16 @@ def get_numeric_setting(
         except ValueError:
             pass
     return default
+
+
+def copy_color(color: ColorObject):
+    if isinstance(color, SolidColor):
+        color_copy = SolidColor()
+        color_copy.rgb.red = color.rgb.red
+        color_copy.rgb.green = color.rgb.green
+        color_copy.rgb.blue = color.rgb.blue
+        return color_copy
+    return get_color(color)
 
 
 def copy():
