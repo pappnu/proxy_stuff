@@ -7,7 +7,12 @@ from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
-from .helpers import copy_color, get_numeric_setting, is_color_identity, parse_hex_color_list
+from .helpers import (
+    copy_color,
+    get_numeric_setting,
+    is_color_identity,
+    parse_hex_color_list,
+)
 from .planeswalker import LAYER_NAMES
 from src.enums.mtg import Rarity
 from src.layouts import SagaLayout
@@ -197,7 +202,7 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
         return super().size
 
     def override_set_symbol(self) -> None:
-        if self.expansion_symbol_color_override:
+        if self.expansion_symbol_color_override is not ExpansionSymbolOverrideMode.Off:
             # Common symbol is used since it can be inverted to get
             # a white symbol with black lines, which is easy to tint with other colors
             self.layout.rarity_letter = Rarity.C[0].upper()
@@ -476,7 +481,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             effects: list[LayerEffects] = [EffectStroke(weight=7, style="out")]
 
             # Expansion symbol color gradient override
-            if mode := self.expansion_symbol_color_override:
+            if (
+                mode := self.expansion_symbol_color_override
+            ) is not ExpansionSymbolOverrideMode.Off:
                 self.expansion_symbol_layer.invert()
 
                 step: int | float
