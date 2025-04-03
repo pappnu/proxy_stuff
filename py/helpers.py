@@ -1,18 +1,41 @@
-from functools import cached_property
 import re
+from enum import Enum, StrEnum
+from functools import cached_property
+from typing import Callable
+
 from photoshop.api import ActionDescriptor, ActionReference, DialogModes, SolidColor
 from photoshop.api._artlayer import ArtLayer
+from photoshop.api._document import Document
+from photoshop.api._layerSet import LayerSet
 
+import src.helpers as psd
+from src import APP
 from src._config import AppConfig
 from src.console import TerminalConsole
 from src.gui.console import GUIConsole
-import src.helpers as psd
-from src import APP
 from src.helpers.colors import get_color, get_rgb_from_hex
 from src.schema.colors import ColorObject
 
 sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 NO_DIALOG = DialogModes.DisplayNoDialogs
+
+
+class LAYER_NAMES(StrEnum):
+    ARROW = "Arrow"
+    ABILITY_DIVIDERS = "Ability Dividers"
+    CARD_NAME = "Card Name"
+    ICON = "Icon"
+    SHADOW = "Shadow"
+    PW = "pw"
+    PW3 = "pw-3"
+    PW4 = "pw-4"
+
+
+class ExpansionSymbolOverrideMode(Enum):
+    Off = 0
+    Identity = 1
+    Pinlines = 2
+    Custom = 3
 
 
 class _LazyValues:
@@ -89,6 +112,19 @@ def copy_color(color: ColorObject):
     return get_color(color)
 
 
+def find_art_layer(
+    root: Document | LayerSet, condition: Callable[[ArtLayer], bool]
+) -> ArtLayer | None:
+    for layer in root.layers:
+        if condition(layer):
+            return layer
+    for layer_set in root.layerSets:
+        found = find_art_layer(layer_set, condition)
+        if found:
+            return found
+    return None
+
+
 def copy():
     """Same as pressing Ctrl-C in Photoshop."""
     APP.executeAction(cID("copy"), None, NO_DIALOG)
@@ -97,6 +133,15 @@ def copy():
 def paste():
     """Same as pressing Ctrl-V in Photoshop."""
     APP.executeAction(cID("past"), None, NO_DIALOG)
+
+
+def create_clipping_mask(layer: ArtLayer):
+    psd.select_layer(layer)
+    desc1 = ActionDescriptor()
+    ref1 = ActionReference()
+    ref1.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
+    desc1.putReference(cID("null"), ref1)
+    APP.executeAction(sID("groupEvent"), desc1, NO_DIALOG)
 
 
 def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:

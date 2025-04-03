@@ -26,8 +26,9 @@ def find_file_in_directory(
 
 
 def open_ask_file_dialog(
-    filetypes: Iterable[tuple[str, str | list[str] | tuple[str, ...]]]
-    | None = [("PSD", "psd")],
+    filetypes: Iterable[tuple[str, str | list[str] | tuple[str, ...]]] | None = [
+        ("PSD", "psd")
+    ],
     *args: Any,
     **kwargs: Any,
 ):

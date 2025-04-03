@@ -1,6 +1,5 @@
-from typing import Any, Optional
 from functools import cached_property
-from enum import StrEnum
+from typing import Any, Optional
 
 from photoshop.api import (
     ActionDescriptor,
@@ -13,10 +12,6 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
 import src.helpers as psd
-from .helpers import (
-    create_vector_mask_from_shape,
-    subtract_front_shape,
-)
 from src import APP, CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
@@ -29,18 +24,10 @@ from src.templates import (
 from src.templates.mdfc import VectorMDFCMod
 from src.templates.transform import VectorTransformMod
 
+from .helpers import LAYER_NAMES, create_vector_mask_from_shape, subtract_front_shape
+
 sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 NO_DIALOG = DialogModes.DisplayNoDialogs
-
-
-class LAYER_NAMES(StrEnum):
-    ARROW = "Arrow"
-    ABILITY_DIVIDERS = "Ability Dividers"
-    ICON = "Icon"
-    SHADOW = "Shadow"
-    PW = "pw"
-    PW3 = "pw-3"
-    PW4 = "pw-4"
 
 
 class PlaneswalkerBorderlessVector(

@@ -1,4 +1,3 @@
-from enum import Enum
 from functools import cached_property
 from math import ceil
 from typing import Any, Callable, Literal
@@ -7,25 +6,18 @@ from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
-from .helpers import (
-    copy_color,
-    get_numeric_setting,
-    is_color_identity,
-    parse_hex_color_list,
-)
-from .planeswalker import LAYER_NAMES
-from src.enums.mtg import Rarity
-from src.layouts import SagaLayout
-from src.schema.colors import ColorObject, GradientColor
 from src import CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
+from src.enums.mtg import Rarity
 from src.helpers.bounds import get_layer_dimensions
 from src.helpers.colors import get_pinline_gradient, get_rgb, rgb_white
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask, copy_layer_mask
+from src.layouts import SagaLayout
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
+from src.schema.colors import ColorObject, GradientColor
 from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.planeswalker import PlaneswalkerMod
@@ -34,12 +26,14 @@ from src.templates.transform import TransformMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
-
-class ExpansionSymbolOverrideMode(Enum):
-    Off = 0
-    Identity = 1
-    Pinlines = 2
-    Custom = 3
+from .helpers import (
+    ExpansionSymbolOverrideMode,
+    copy_color,
+    get_numeric_setting,
+    is_color_identity,
+    parse_hex_color_list,
+)
+from .helpers import LAYER_NAMES
 
 
 class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, SagaMod):
