@@ -4,6 +4,7 @@ A plugin for additional Proxyshop templates.
 
 ## Templates
 - Borderless Showcase
+- Borderless Saga
 - Vectorized Borderless Planeswalker
 
 ## Installation

@@ -36,3 +36,12 @@ borderless-showcase.psd:
         - pw_mdfc_back
         - saga
         - class
+
+borderless-vertical.psd:
+  name: 'Borderless'
+  id: '1OZXZq3xPdfSsypmIXcKiBHupZK-ssGtw'
+  desc: 'The Borderless template adjusted for Saga cards.'
+  templates:
+    Borderless:
+      BorderlessSagaTemplate:
+        - saga
