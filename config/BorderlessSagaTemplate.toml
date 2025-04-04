@@ -22,6 +22,12 @@ desc = """When enabled, card text will have a drop shadow."""
 type = "bool"
 default = 1
 
+[TEXT."Vertical.Reminder"]
+title = "Saga/Class Reminder"
+desc = """When enabled, the Saga/Class reminder text is displayed."""
+type = "bool"
+default = 1
+
 [COLORS]
 title = "Color Options"
 

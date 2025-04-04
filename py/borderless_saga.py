@@ -21,6 +21,12 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
     # region Settings
 
     @cached_property
+    def show_vertical_reminder_text(self) -> bool:
+        return bool(
+            CFG.get_setting(section="TEXT", key="Vertical.Reminder", default=False)
+        )
+
+    @cached_property
     def color_typeline(self) -> bool:
         return bool(
             CFG.get_setting(section="COLORS", key="Color.Typeline", default=False)
@@ -131,9 +137,7 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
     def textbox_reference(self) -> ReferenceLayer | None:
         if self.is_layout_saga:
             return get_reference_layer(
-                f"{LAYERS.TEXTBOX_REFERENCE} {LAYERS.TRANSFORM_FRONT}"
-                if self.is_front and self.is_flipside_creature
-                else LAYERS.TEXTBOX_REFERENCE,
+                f"{LAYERS.TEXTBOX_REFERENCE}{'' if self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
                 self.saga_group,
             )
         return super().textbox_reference
@@ -184,16 +188,19 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
             layer.visible = True
         disable_mask(self.pinlines_group)
 
-    # TODO Submit the icon generation officially to Proxyshop to avoid this ugly copy paste
+    # TODO submit reminder and icon improvements to Proxyshop
     def text_layers_saga(self):
-        # Add description text with reminder
-        self.text.append(
-            FormattedTextArea(
-                layer=self.text_layer_reminder,
-                contents=self.layout.saga_description,
-                reference=self.reminder_reference,
+        # Handle reminder text
+        if self.show_vertical_reminder_text:
+            self.text.append(
+                FormattedTextArea(
+                    layer=self.text_layer_reminder,
+                    contents=self.layout.saga_description,
+                    reference=self.reminder_reference,
+                )
             )
-        )
+        else:
+            self.text_layer_reminder.visible = False
 
         # Iterate through each saga stage and add line to text layers
         for i, line in enumerate(self.layout.saga_lines):
