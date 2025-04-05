@@ -20,7 +20,7 @@ default = 0
 title = "Text Drop Shadow"
 desc = """When enabled, card text will have a drop shadow."""
 type = "bool"
-default = 1
+default = 0
 
 [TEXT."Vertical.Reminder"]
 title = "Saga/Class Reminder"
