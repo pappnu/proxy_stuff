@@ -1,11 +1,15 @@
 from functools import cached_property
-from typing import Callable
+from typing import Any, Callable
 
+from photoshop.api import SolidColor
+from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
 from src import CFG
 from src.enums.layers import LAYERS
+from src.helpers.colors import get_rgb
+from src.helpers.effects import enable_layer_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import disable_mask
 from src.layouts import SagaLayout
@@ -63,6 +67,16 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
             return LAYERS.TEXTLESS
         return super().size
 
+    @cached_property
+    def frame_type(self) -> str:
+        if self.is_layout_saga and self.is_transform:
+            return f"{LAYERS.TEXTLESS} {LAYERS.TRANSFORM}"
+        return super().frame_type
+
+    @cached_property
+    def vertical_mode_layer_name(self) -> str:
+        return f"{LAYERS.SAGA}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}"
+
     # endregion Frame details
 
     # region Shapes
@@ -95,7 +109,9 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
                 layers.append(layer)
 
             # Textbox
-            if layer := getLayer(LAYERS.SAGA, [_shape_group, LAYERS.TEXTBOX]):
+            if layer := getLayer(
+                self.vertical_mode_layer_name, [_shape_group, LAYERS.TEXTBOX]
+            ):
                 layers.append(layer)
 
             return layers
@@ -122,10 +138,27 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
     @cached_property
     def textbox_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
         if self.is_layout_saga:
-            return getLayer(LAYERS.SAGA, [self.textbox_group, LAYERS.SHAPE])
+            return getLayer(
+                self.vertical_mode_layer_name,
+                [self.textbox_group, LAYERS.SHAPE],
+            )
         return super().textbox_shape
 
     # endregion Shapes
+
+    # region Masks
+
+    @cached_property
+    def border_mask(self) -> list[ArtLayer] | dict[str, Any] | None:
+        if self.is_layout_saga:
+            return {
+                "mask": getLayer(LAYERS.SAGA, [self.mask_group, LAYERS.BORDER]),
+                "layer": self.border_group,
+                "vector": True,
+            }
+        return super().border_mask
+
+    # endregion Masks
 
     # region Reference layers
 
@@ -143,6 +176,28 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
         return super().textbox_reference
 
     # endregion Reference layers
+
+    # region Text
+
+    def swap_layer_font_color(
+        self, layer: ArtLayer, color: SolidColor | None = None
+    ) -> None:
+        color = color or self.RGB_BLACK
+        layer.textItem.color = color
+
+    @cached_property
+    def text_layer_rules(self) -> ArtLayer | None:
+        if self.is_layout_saga:
+            return self.text_layer_ability
+        return super().text_layer_rules
+
+    @cached_property
+    def text_layer_flipside_pt(self) -> ArtLayer | None:
+        if self.is_layout_saga:
+            return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, [self.saga_group])
+        return super().text_layer_flipside_pt
+
+    # endregion Text
 
     # region Hooks
 
@@ -202,6 +257,12 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
         else:
             self.text_layer_reminder.visible = False
 
+        if self.color_textbox and self.is_authentic_front:
+            self.swap_layer_font_color(self.text_layer_ability)
+
+        if self.is_drop_shadow:
+            enable_layer_fx(self.text_layer_ability)
+
         # Iterate through each saga stage and add line to text layers
         for i, line in enumerate(self.layout.saga_lines):
             # Generate icon layers for this ability
@@ -225,3 +286,30 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
             self.text.append(FormattedTextField(layer=layer, contents=line["text"]))
 
     # endregion Saga
+
+    # region Transform
+
+    def text_layers_transform_front(self) -> None:
+        if self.is_layout_saga:
+            if self.is_authentic_front and self.text_layer_name:
+                self.swap_layer_font_color(self.text_layer_name)
+
+            if self.is_authentic_front and self.color_typeline and self.text_layer_type:
+                self.swap_layer_font_color(self.text_layer_type)
+
+            if self.color_textbox and self.show_vertical_reminder_text:
+                self.swap_layer_font_color(self.text_layer_reminder)
+
+            if (
+                self.color_textbox
+                and not self.is_authentic_front
+                and self.is_flipside_creature
+                and self.text_layer_flipside_pt
+            ):
+                self.text_layer_flipside_pt.textItem.color = get_rgb(*[186, 186, 186])
+
+            super(BorderlessVectorTemplate, self).text_layers_transform_front()
+        else:
+            super().text_layers_transform_front()
+
+    # endregion Transform
