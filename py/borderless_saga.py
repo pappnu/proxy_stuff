@@ -11,7 +11,7 @@ from src.enums.layers import LAYERS
 from src.helpers.colors import get_rgb
 from src.helpers.effects import enable_layer_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
-from src.helpers.masks import disable_mask
+from src.helpers.masks import apply_mask_to_layer_fx
 from src.layouts import SagaLayout
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.saga import SagaMod
@@ -158,6 +158,19 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
             }
         return super().border_mask
 
+    @cached_property
+    def pinlines_mask(self) -> dict[str, Any]:
+        if self.is_layout_saga:
+            return {
+                "mask": getLayer(
+                    f"{LAYERS.SAGA}{f' {LAYERS.TRANSFORM}' if self.is_transform else ''}",
+                    [self.mask_group, LAYERS.PINLINES],
+                ),
+                "layer": self.pinlines_group,
+                "funcs": [apply_mask_to_layer_fx],
+            }
+        return super().pinlines_mask
+
     # endregion Masks
 
     # region Reference layers
@@ -241,7 +254,6 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
             self.saga_group.visible = True
         if layer := getLayerSet(LAYERS.SAGA, [self.pinlines_group, LAYERS.SHAPE]):
             layer.visible = True
-        disable_mask(self.pinlines_group)
 
     # TODO submit reminder and icon improvements to Proxyshop
     def text_layers_saga(self):
