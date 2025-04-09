@@ -2,9 +2,9 @@ from pathlib import Path
 
 from photoshop.api._artlayer import ArtLayer
 
-from plugins.proxy_stuff.py.borderless_saga import BorderlessSaga
 from src.utils.adobe import ReferenceLayer
 
+from .borderless_saga import BorderlessSaga
 from .borderless_showcase import BorderlessShowcase
 from .planeswalker import PlaneswalkerBorderlessVector
 from .restore import load_backup_artwork
