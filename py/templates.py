@@ -4,7 +4,7 @@ from photoshop.api._artlayer import ArtLayer
 
 from src.utils.adobe import ReferenceLayer
 
-from .borderless_saga import BorderlessSaga
+from .borderless_vertical import BorderlessVertical
 from .borderless_showcase import BorderlessShowcase
 from .planeswalker import PlaneswalkerBorderlessVector
 from .restore import load_backup_artwork
@@ -36,7 +36,7 @@ class BorderlessShowcaseTemplate(BorderlessShowcase):
             return super().load_artwork(art_file, art_layer, art_reference)
 
 
-class BorderlessSagaTemplate(BorderlessSaga):
+class BorderlessVerticalTemplate(BorderlessVertical):
     template_suffix = "Borderless"
 
     def load_artwork(

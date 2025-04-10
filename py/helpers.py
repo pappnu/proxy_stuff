@@ -29,6 +29,7 @@ class LAYER_NAMES(StrEnum):
     PW = "pw"
     PW3 = "pw-3"
     PW4 = "pw-4"
+    VERTICAL = "Vertical"
 
 
 class ExpansionSymbolOverrideMode(Enum):

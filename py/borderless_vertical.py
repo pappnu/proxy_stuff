@@ -8,20 +8,21 @@ from photoshop.api.enumerations import ElementPlacement
 
 from src import CFG
 from src.enums.layers import LAYERS
-from src.helpers.colors import get_rgb
+from src.helpers.colors import get_rgb, rgb_white
 from src.helpers.effects import enable_layer_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask_to_layer_fx
 from src.layouts import SagaLayout
+from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.saga import SagaMod
-from src.text_layers import FormattedTextArea, FormattedTextField
+from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
 from .helpers import LAYER_NAMES, create_clipping_mask, find_art_layer
 
 
-class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
+class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
     # region Settings
 
     @cached_property
@@ -51,6 +52,10 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
     def is_layout_saga(self) -> bool:
         return isinstance(self.layout, SagaLayout)
 
+    @cached_property
+    def is_vertical_layout(self) -> bool:
+        return self.is_layout_saga or self.is_class_layout
+
     # endregion Checks
 
     # region Frame details
@@ -59,31 +64,45 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
     def layout_keyword(self) -> str:
         if self.is_layout_saga:
             return LAYERS.SAGA
+        if self.is_class_layout:
+            return LAYERS.CLASS
         raise NotImplementedError("Unsupported layout")
 
     @cached_property
     def size(self) -> str:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             return LAYERS.TEXTLESS
         return super().size
 
     @cached_property
     def frame_type(self) -> str:
-        if self.is_layout_saga and self.is_transform:
+        if self.is_vertical_layout and self.is_transform:
             return f"{LAYERS.TEXTLESS} {LAYERS.TRANSFORM}"
         return super().frame_type
 
     @cached_property
     def vertical_mode_layer_name(self) -> str:
-        return f"{LAYERS.SAGA}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}"
+        return f"{self.layout_keyword}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}"
 
     # endregion Frame details
+
+    # region Groups
+
+    @cached_property
+    def vertical_group(self) -> LayerSet | None:
+        if self.is_layout_saga:
+            return self.saga_group
+        if self.is_class_layout:
+            return self.class_group
+        raise NotImplementedError("Unsupported layout")
+
+    # endregion Groups
 
     # region Shapes
 
     @cached_property
     def pinlines_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             _shape_group = getLayerSet(LAYERS.SHAPE, self.pinlines_group)
 
             layers: list[LayerObjectTypes] = []
@@ -103,7 +122,7 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
 
             # Typeline
             if layer := getLayer(
-                LAYERS.SAGA,
+                LAYER_NAMES.VERTICAL,
                 [_shape_group, LAYERS.TYPE_LINE],
             ):
                 layers.append(layer)
@@ -119,7 +138,7 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
 
     @cached_property
     def twins_shape(self) -> LayerObjectTypes | list[LayerObjectTypes | None] | None:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             _shape_group = getLayerSet(LAYERS.SHAPE, self.twins_group)
             return [
                 getLayer(
@@ -129,7 +148,7 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
                     [_shape_group, LAYERS.NAME],
                 ),
                 getLayer(
-                    LAYERS.SAGA,
+                    LAYER_NAMES.VERTICAL,
                     [_shape_group, LAYERS.TYPE_LINE],
                 ),
             ]
@@ -137,7 +156,7 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
 
     @cached_property
     def textbox_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             return getLayer(
                 self.vertical_mode_layer_name,
                 [self.textbox_group, LAYERS.SHAPE],
@@ -150,9 +169,11 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
 
     @cached_property
     def border_mask(self) -> list[ArtLayer] | dict[str, Any] | None:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             return {
-                "mask": getLayer(LAYERS.SAGA, [self.mask_group, LAYERS.BORDER]),
+                "mask": getLayer(
+                    LAYER_NAMES.VERTICAL, [self.mask_group, LAYERS.BORDER]
+                ),
                 "layer": self.border_group,
                 "vector": True,
             }
@@ -160,10 +181,10 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
 
     @cached_property
     def pinlines_mask(self) -> dict[str, Any]:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             return {
                 "mask": getLayer(
-                    f"{LAYERS.SAGA}{f' {LAYERS.TRANSFORM}' if self.is_transform else ''}",
+                    f"{LAYER_NAMES.VERTICAL}{f' {LAYERS.TRANSFORM}' if self.is_transform else ''}",
                     [self.mask_group, LAYERS.PINLINES],
                 ),
                 "layer": self.pinlines_group,
@@ -181,10 +202,10 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
 
     @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             return get_reference_layer(
                 f"{LAYERS.TEXTBOX_REFERENCE}{'' if self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
-                self.saga_group,
+                self.vertical_group,
             )
         return super().textbox_reference
 
@@ -199,16 +220,31 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
         layer.textItem.color = color
 
     @cached_property
+    def text_layer_ability(self) -> ArtLayer | None:
+        return getLayer(LAYERS.TEXT, self.vertical_group)
+
+    @cached_property
+    def text_layer_reminder(self) -> ArtLayer | None:
+        return getLayer("Reminder Text", self.vertical_group)
+
+    @cached_property
     def text_layer_rules(self) -> ArtLayer | None:
-        if self.is_layout_saga:
+        if self.is_vertical_layout:
             return self.text_layer_ability
         return super().text_layer_rules
 
     @cached_property
     def text_layer_flipside_pt(self) -> ArtLayer | None:
-        if self.is_layout_saga:
-            return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, [self.saga_group])
+        if self.is_vertical_layout:
+            return getLayer(
+                LAYERS.FLIPSIDE_POWER_TOUGHNESS,
+                [self.vertical_group],
+            )
         return super().text_layer_flipside_pt
+
+    @cached_property
+    def reminder_divider_layer(self) -> ArtLayer | None:
+        return getLayer(LAYERS.DIVIDER, self.vertical_group)
 
     # endregion Text
 
@@ -247,13 +283,62 @@ class BorderlessSaga(BorderlessVectorTemplate, SagaMod):
 
     # endregion Hooks
 
+    # region Class
+
+    def frame_layers_classes(self) -> None:
+        if self.class_group:
+            self.class_group.visible = True
+        if (
+            not self.show_vertical_reminder_text
+            and self.text_layer_reminder
+            and self.reminder_divider_layer
+        ):
+            self.text_layer_reminder.visible = False
+            self.reminder_divider_layer.visible = False
+
+    # TODO find out a way to set the cost colon as white that doesn't involve lots of copy paste
+    def text_layers_classes(self) -> None:
+        # Add first static line
+        self.line_layers.append(self.text_layer_ability)
+        self.text.append(
+            FormattedTextField(
+                layer=self.text_layer_ability,
+                contents=self.layout.class_lines[0]["text"],
+            )
+        )
+
+        # Add text fields for each line and class stage
+        for i, line in enumerate(self.layout.class_lines[1:]):
+            # Create a new ability line
+            line_layer = self.text_layer_ability.duplicate()
+            self.line_layers.append(line_layer)
+
+            # Use existing stage divider or create new one
+            stage = self.stage_group if i == 0 else self.stage_group.duplicate()
+            cost, level = [*stage.artLayers][:2]
+            self.stage_layers.append(stage)
+
+            # Add text layers to be formatted
+            self.text.extend(
+                [
+                    FormattedTextField(layer=line_layer, contents=line["text"]),
+                    FormattedTextField(
+                        layer=cost,
+                        contents=f"{line['cost']}:",
+                        # the whole function had to be overridden to set this color kwarg
+                        color=rgb_white(),
+                    ),
+                    TextField(layer=level, contents=f"Level {line['level']}"),
+                ]
+            )
+
+    # endregion Class
+
     # region Saga
 
     def frame_layers_saga(self):
         if self.saga_group:
             self.saga_group.visible = True
-        if layer := getLayerSet(LAYERS.SAGA, [self.pinlines_group, LAYERS.SHAPE]):
-            layer.visible = True
 
     # TODO submit reminder and icon improvements to Proxyshop
     def text_layers_saga(self):

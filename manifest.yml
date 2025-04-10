@@ -40,8 +40,9 @@ borderless-showcase.psd:
 borderless-vertical.psd:
   name: 'Borderless'
   id: '1OZXZq3xPdfSsypmIXcKiBHupZK-ssGtw'
-  desc: 'The Borderless template adjusted for Saga cards.'
+  desc: 'The Borderless template adjusted for Class and Saga cards.'
   templates:
     Borderless:
-      BorderlessSagaTemplate:
+      BorderlessVerticalTemplate:
+        - class
         - saga
