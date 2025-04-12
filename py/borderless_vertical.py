@@ -16,7 +16,11 @@ from src.layouts import SagaLayout
 from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.saga import SagaMod
-from src.text_layers import FormattedTextArea, FormattedTextField, TextField
+from src.text_layers import (
+    FormattedTextArea,
+    FormattedTextField,
+    TextField,
+)
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
 from .helpers import LAYER_NAMES, create_clipping_mask, find_art_layer
@@ -56,6 +60,14 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
     def is_vertical_layout(self) -> bool:
         return self.is_layout_saga or self.is_class_layout
 
+    @cached_property
+    def is_vertical_creature(self) -> bool:
+        return self.is_vertical_layout and self.is_creature
+
+    @cached_property
+    def is_pt_enabled(self) -> bool:
+        return self.is_vertical_creature or super().is_pt_enabled
+
     # endregion Checks
 
     # region Frame details
@@ -84,6 +96,11 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
     def vertical_mode_layer_name(self) -> str:
         return f"{self.layout_keyword}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}"
 
+    def process_layout_data(self) -> None:
+        if self.is_vertical_creature:
+            CFG.remove_flavor = True
+        return super().process_layout_data()
+
     # endregion Frame details
 
     # region Groups
@@ -95,6 +112,12 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
         if self.is_class_layout:
             return self.class_group
         raise NotImplementedError("Unsupported layout")
+
+    @cached_property
+    def pt_group(self) -> LayerSet | None:
+        if self.is_vertical_layout:
+            return getLayerSet(LAYERS.PT_BOX)
+        return super().pt_group
 
     # endregion Groups
 
@@ -162,6 +185,18 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
                 [self.textbox_group, LAYERS.SHAPE],
             )
         return super().textbox_shape
+
+    @cached_property
+    def pt_shape(self) -> ArtLayer | None:
+        if self.is_vertical_creature:
+            return getLayer(
+                f"{LAYERS.PT_BOX} {LAYER_NAMES.VERTICAL}", [self.pt_group, LAYERS.SHAPE]
+            )
+        return None
+
+    @cached_property
+    def enabled_shapes(self) -> list[ArtLayer | LayerSet | None]:
+        return [*super().enabled_shapes, self.pt_shape]
 
     # endregion Shapes
 
@@ -234,6 +269,14 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
         return super().text_layer_rules
 
     @cached_property
+    def text_layer_pt(self) -> ArtLayer | None:
+        if self.is_vertical_creature:
+            return getLayer(
+                f"{LAYERS.POWER_TOUGHNESS} {LAYER_NAMES.VERTICAL}", [self.text_group]
+            )
+        return super().text_layer_pt
+
+    @cached_property
     def text_layer_flipside_pt(self) -> ArtLayer | None:
         if self.is_vertical_layout:
             return getLayer(
@@ -245,6 +288,11 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
     @cached_property
     def reminder_divider_layer(self) -> ArtLayer | None:
         return getLayer(LAYERS.DIVIDER, self.vertical_group)
+
+    def rules_text_and_pt_layers(self) -> None:
+        if self.is_vertical_layout and not self.is_creature:
+            return None
+        return super(SagaMod, self).rules_text_and_pt_layers()
 
     # endregion Text
 
