@@ -13,6 +13,7 @@ from src.helpers.effects import enable_layer_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask_to_layer_fx
 from src.layouts import SagaLayout
+from src.templates.case import CaseMod
 from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.saga import SagaMod
@@ -26,7 +27,7 @@ from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 from .helpers import LAYER_NAMES, create_clipping_mask, find_art_layer
 
 
-class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
+class BorderlessVertical(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # region Settings
 
     @cached_property
@@ -58,7 +59,7 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
 
     @cached_property
     def is_vertical_layout(self) -> bool:
-        return self.is_layout_saga or self.is_class_layout
+        return self.is_layout_saga or self.is_class_layout or self.is_case_layout
 
     @cached_property
     def is_vertical_creature(self) -> bool:
@@ -76,8 +77,8 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
     def layout_keyword(self) -> str:
         if self.is_layout_saga:
             return LAYERS.SAGA
-        if self.is_class_layout:
-            return LAYERS.CLASS
+        if self.is_class_layout or self.is_case_layout:
+            return f"{LAYER_NAMES.VERTICAL} {LAYERS.RIGHT}"
         raise NotImplementedError("Unsupported layout")
 
     @cached_property
@@ -111,6 +112,8 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
             return self.saga_group
         if self.is_class_layout:
             return self.class_group
+        if self.is_case_layout:
+            return self.case_group
         raise NotImplementedError("Unsupported layout")
 
     @cached_property
@@ -239,7 +242,7 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
     def textbox_reference(self) -> ReferenceLayer | None:
         if self.is_vertical_layout:
             return get_reference_layer(
-                f"{LAYERS.TEXTBOX_REFERENCE}{'' if self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
+                f"{LAYERS.TEXTBOX_REFERENCE}{'' if self.is_case_layout or self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
                 self.vertical_group,
             )
         return super().textbox_reference
@@ -330,6 +333,15 @@ class BorderlessVertical(BorderlessVectorTemplate, ClassMod, SagaMod):
         return [*super().hooks, self.disable_colors]
 
     # endregion Hooks
+
+    # region Case
+
+    def frame_layers_case(self) -> None:
+        if self.case_group:
+            self.case_group.visible = True
+        return super().frame_layers_case()
+
+    # endregion Case
 
     # region Class
 
