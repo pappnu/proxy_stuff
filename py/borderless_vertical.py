@@ -110,17 +110,27 @@ class BorderlessVertical(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def vertical_group(self) -> LayerSet | None:
         if self.is_layout_saga:
             return self.saga_group
-        if self.is_class_layout:
-            return self.class_group
-        if self.is_case_layout:
-            return self.case_group
+        if self.is_class_layout or self.is_case_layout:
+            return self.vertical_right_group
         raise NotImplementedError("Unsupported layout")
+
+    @cached_property
+    def vertical_right_group(self) -> LayerSet | None:
+        return getLayerSet(f"{LAYER_NAMES.VERTICAL} {LAYERS.RIGHT}")
 
     @cached_property
     def pt_group(self) -> LayerSet | None:
         if self.is_vertical_layout:
             return getLayerSet(LAYERS.PT_BOX)
         return super().pt_group
+
+    @cached_property
+    def case_group(self) -> LayerSet | None:
+        return self.vertical_right_group
+
+    @cached_property
+    def class_group(self) -> LayerSet | None:
+        return self.vertical_right_group
 
     # endregion Groups
 
@@ -242,7 +252,7 @@ class BorderlessVertical(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def textbox_reference(self) -> ReferenceLayer | None:
         if self.is_vertical_layout:
             return get_reference_layer(
-                f"{LAYERS.TEXTBOX_REFERENCE}{'' if self.is_case_layout or self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
+                f"{LAYERS.TEXTBOX_REFERENCE}{'' if not self.is_case_layout and self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
                 self.vertical_group,
             )
         return super().textbox_reference
@@ -348,13 +358,10 @@ class BorderlessVertical(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def frame_layers_classes(self) -> None:
         if self.class_group:
             self.class_group.visible = True
-        if (
-            not self.show_vertical_reminder_text
-            and self.text_layer_reminder
-            and self.reminder_divider_layer
-        ):
-            self.text_layer_reminder.visible = False
+        if not self.show_vertical_reminder_text and self.reminder_divider_layer:
             self.reminder_divider_layer.visible = False
+        elif self.text_layer_reminder:
+            self.text_layer_reminder.visible = True
 
     # TODO find out a way to set the cost colon as white that doesn't involve lots of copy paste
     def text_layers_classes(self) -> None:
