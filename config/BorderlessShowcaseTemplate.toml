@@ -73,6 +73,12 @@ desc = """When enabled, card will be rendered with both a 'real' name and a 'nic
 type = "bool"
 default = 0
 
+[TEXT."Vertical.Reminder"]
+title = "Saga/Class Reminder"
+desc = """When enabled, the Saga/Class reminder text is displayed."""
+type = "bool"
+default = 1
+
 [SHAPES]
 title = "Shape Options"
 
@@ -89,6 +95,12 @@ desc = """The type of the bottom border."""
 type = "options"
 default = "Full"
 options = ["Full", "Fade", "Shadow", "None"]
+
+[SHAPES."Flip.Twins"]
+title = "Flip Name and Type Pinlines Horizontally"
+desc = """When enabled, flips name and type pinlines horizontally. Mainly meant to make the layout look neater without a Set symbol."""
+type = "bool"
+default = 0
 
 [OTHER]
 title = "Other Options"

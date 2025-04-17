@@ -136,6 +136,18 @@ def paste():
     APP.executeAction(cID("past"), None, NO_DIALOG)
 
 
+class FlipDirection(StrEnum):
+    Horizontal = "Hrzn"
+    Vertical = "Vrtc"
+
+
+def flip_layer(layer: ArtLayer | LayerSet, direction: FlipDirection):
+    psd.select_layer(layer)
+    desc = ActionDescriptor()
+    desc.putEnumerated(cID("Axis"), cID("Ornt"), cID(direction))
+    APP.executeAction(cID("Flip"), desc, NO_DIALOG)
+
+
 def create_clipping_mask(layer: ArtLayer):
     psd.select_layer(layer)
     desc1 = ActionDescriptor()

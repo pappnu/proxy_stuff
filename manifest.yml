@@ -35,6 +35,7 @@ borderless-showcase.psd:
         - pw_mdfc_front
         - pw_mdfc_back
         - saga
+        - case
         - class
 
 borderless-vertical.psd:

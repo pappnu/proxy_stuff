@@ -6,40 +6,37 @@ from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
-from src import CFG
+from src import APP, CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
 from src.helpers.bounds import get_layer_dimensions
-from src.helpers.colors import get_pinline_gradient, get_rgb, rgb_white
+from src.helpers.colors import get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask, copy_layer_mask
-from src.layouts import SagaLayout
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
 from src.schema.colors import ColorObject, GradientColor
-from src.templates.classes import ClassMod
-from src.templates.normal import BorderlessVectorTemplate
 from src.templates.planeswalker import PlaneswalkerMod
 from src.templates.saga import SagaMod
 from src.templates.transform import TransformMod
-from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
 from .helpers import (
+    LAYER_NAMES,
     ExpansionSymbolOverrideMode,
+    FlipDirection,
     copy_color,
+    flip_layer,
     get_numeric_setting,
     is_color_identity,
     parse_hex_color_list,
 )
-from .helpers import LAYER_NAMES
+from .vertical_mod import VerticalMod
 
 
-class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, SagaMod):
-    """
-    * Settings
-    """
+class BorderlessShowcase(VerticalMod, PlaneswalkerMod):
+    # region settings
 
     @cached_property
     def color_limit(self) -> int:
@@ -85,6 +82,10 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
         if setting == "None":
             return None
         raise ValueError(f"Received invalid value for bottom border type: {setting}")
+
+    @cached_property
+    def flip_twins(self) -> bool:
+        return bool(CFG.get_setting(section="SHAPES", key="Flip.Twins", default=False))
 
     @cached_property
     def pinlines_color_override(self) -> list[SolidColor]:
@@ -158,26 +159,21 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             return setting
         return "linear"
 
-    """
-    * Checks
-    """
+    # endregion settings
+
+    # region Checks
 
     @cached_property
     def is_planeswalker(self) -> bool:
         return hasattr(self.layout, "pw_size")
 
-    # TODO remove this once is_layout_saga has been marked as property on Proxyshop's side
-    @cached_property
-    def is_layout_saga(self) -> bool:
-        return isinstance(self.layout, SagaLayout)
-
     @cached_property
     def is_pt_enabled(self) -> bool:
         return self.is_creature
 
-    """
-    * Frame Details
-    """
+    # endregion Checks
+
+    # region Frame Details
 
     @property
     def art_frame_vertical(self) -> str:
@@ -187,8 +183,6 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
 
     @cached_property
     def size(self) -> str:
-        if self.is_layout_saga or self.is_class_layout:
-            return LAYERS.TEXTLESS
         if self.is_planeswalker:
             if self.layout.pw_size > 3:
                 return LAYER_NAMES.PW4
@@ -205,9 +199,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     def pre_render_methods(self) -> list[Callable[[], None]]:
         return [*super().pre_render_methods, self.override_set_symbol]
 
-    """
-    * Colors
-    """
+    # endregion Frame Details
+
+    # region Colors
 
     @cached_property
     def pt_colors(self) -> list[int] | list[dict[str, Any]]:
@@ -243,9 +237,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             )
         return super().pinlines_colors
 
-    """
-    * Groups
-    """
+    # endregion Colors
+
+    # region Groups
 
     @cached_property
     def pt_group(self) -> LayerSet | None:
@@ -271,26 +265,12 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             return layer
         raise Exception("Couldn't get text group.")
 
-    """
-    * Reference layers
-    """
+    # endregion Groups
 
-    @cached_property
-    def art_reference(self) -> ReferenceLayer:
-        return super(SagaMod, self).art_reference
+    # region Reference Layers
 
     @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
-        if self.is_class_layout:
-            return get_reference_layer(LAYERS.TEXTBOX_REFERENCE, self.class_group)
-        if self.is_layout_saga:
-            return get_reference_layer(
-                f"{LAYERS.TEXTBOX_REFERENCE} {LAYERS.TRANSFORM_FRONT}"
-                if self.is_front and self.is_flipside_creature
-                else LAYERS.TEXTBOX_REFERENCE,
-                self.saga_group,
-            )
-
         if self.is_planeswalker:
             ref = get_reference_layer(
                 self.size,
@@ -311,9 +291,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             return ref
         return super().textbox_reference
 
-    """
-    * Shapes
-    """
+    # endregion Reference Layers
+
+    # region Shapes
 
     @cached_property
     def pt_box_shape(self) -> list[ArtLayer | None]:
@@ -369,9 +349,26 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
         _shape_group = getLayerSet(LAYERS.SHAPE, self.pinlines_group)
 
         layers: list[LayerObjectTypes] = []
+        delta: int | float = 0
 
         # Name
-        if layer := getLayerSet(
+        if (
+            self.flip_twins
+            and not (self.is_transform or self.is_mdfc)
+            and (
+                layer_set := getLayerSet(
+                    LAYERS.NORMAL,
+                    [_shape_group, LAYERS.NAME],
+                )
+            )
+            and (layer := getLayer(LAYERS.NORMAL, layer_set))
+        ):
+            dims = get_layer_dimensions(layer)
+            delta = APP.activeDocument.width - 2 * dims[Dimensions.CenterX]
+            layer.translate(delta, 0)
+            flip_layer(layer, FlipDirection.Horizontal)
+            layers.append(layer_set)
+        elif layer := getLayerSet(
             LAYERS.TRANSFORM
             if self.is_transform
             else (LAYERS.MDFC if self.is_mdfc else LAYERS.NORMAL),
@@ -384,8 +381,10 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             layers.append(getLayerSet(LAYERS.NICKNAME, _shape_group))
 
         if self.is_planeswalker:
-            if layer := getLayerSet(self.size, _shape_group):
-                layers.append(layer)
+            if layer_set := getLayerSet(self.size, _shape_group):
+                if self.flip_twins and (layer := getLayer(LAYERS.RIGHT, layer_set)):
+                    layer.visible = False
+                layers.append(layer_set)
             return layers
 
         # Typeline
@@ -395,6 +394,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
                 [_shape_group, LAYERS.TYPE_LINE],
             )
         ):
+            if self.flip_twins:
+                layer.translate(-delta, 0)
+                flip_layer(layer, FlipDirection.Horizontal)
             layers.append(layer)
 
         return layers
@@ -424,9 +426,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             self.bottom_pinline_shape,
         ]
 
-    """
-    * Masks
-    """
+    # endregion Shapes
+
+    # region Masks
 
     def pw_mask_bottom(self):
         if (
@@ -443,18 +445,14 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
     ) -> list[dict[str, Any] | list[Any] | ArtLayer | LayerSet | None]:
         return [self.pw_mask_bottom()]
 
-    """
-    * Text
-    """
+    # endregion Masks
+
+    # region Text
 
     @cached_property
     def text_layer_ability(self) -> ArtLayer:
         if self.is_planeswalker:
-            return super().text_layer_ability
-        if self.is_layout_saga and (layer := getLayer(LAYERS.TEXT, self.saga_group)):
-            return layer
-        if self.is_class_layout and (layer := getLayer(LAYERS.TEXT, self.class_group)):
-            return layer
+            return super(SagaMod, self).text_layer_ability
         return super().text_layer_ability
 
     @cached_property
@@ -462,9 +460,6 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
         if self.is_layout_saga:
             return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, self.saga_group)
         return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, self.text_group)
-
-    def rules_text_and_pt_layers(self) -> None:
-        super(SagaMod, self).rules_text_and_pt_layers()
 
     def expansion_symbol_handler(self) -> None:
         if self.expansion_symbol_layer:
@@ -550,7 +545,7 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
         ref_group = getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group)
         ref = (
             get_reference_layer(LAYERS.TEXTLESS, ref_group)
-            if self.is_layout_saga or self.is_class_layout
+            if self.is_vertical_layout
             else self.textbox_reference
         )
         if ref and (
@@ -562,14 +557,17 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             dims_ref = get_layer_dimensions(ref)
             dims_obj = get_layer_dimensions(shape)
             delta = dims_ref[Dimensions.Top] - dims_obj[Dimensions.Top]
-            self.text_layer_type.translate(0, delta)
+
+            # Shift typeline text
+            if self.text_layer_type:
+                self.text_layer_type.translate(0, delta)
 
             # Shift expansion symbol
             if CFG.symbol_enabled and self.expansion_symbol_layer:
                 self.expansion_symbol_layer.translate(0, delta)
 
             # Shift indicator
-            if self.is_type_shifted:
+            if self.is_type_shifted and self.indicator_group:
                 self.indicator_group.parent.translate(0, delta)
 
     def pw_enable_loyalty_graphics(self) -> None:
@@ -599,9 +597,9 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
             self.pw_enable_loyalty_graphics,
         ]
 
-    """
-    * Transform Methods
-    """
+    # endregion Text
+
+    # region Transform Methods
 
     def text_layers_transform_front(self) -> None:
         """Switch font colors on 'Authentic' front face cards."""
@@ -615,98 +613,39 @@ class BorderlessShowcase(BorderlessVectorTemplate, PlaneswalkerMod, ClassMod, Sa
         ):
             self.text_layer_flipside_pt.textItem.color = get_rgb(*[186, 186, 186])
 
-    """
-    * MDFC Methods
-    """
+    # endregion Transform Methods
+
+    # region MDFC Methods
 
     def text_layers_mdfc_front(self) -> None:
         pass
 
-    """
-    * Class
-    """
+    # endregion MDFC Methods
+
+    # region Vertical Right
+
+    def frame_layers_vertical_right(self) -> None:
+        if layer := getLayerSet(
+            f"{LAYER_NAMES.VERTICAL} {LAYERS.RIGHT}",
+            [self.pinlines_group, LAYERS.SHAPE],
+        ):
+            layer.visible = True
+
+    def frame_layers_case(self) -> None:
+        self.frame_layers_vertical_right()
+        return super().frame_layers_case()
 
     def frame_layers_classes(self) -> None:
-        if self.class_group:
-            self.class_group.visible = True
-        if layer := getLayerSet(LAYERS.CLASS, [self.pinlines_group, LAYERS.SHAPE]):
-            layer.visible = True
+        self.frame_layers_vertical_right()
+        return super().frame_layers_classes()
 
-    # TODO find out a way to set the cost colon as white that doesn't involve lots of copy paste
-    def text_layers_classes(self) -> None:
-        # Add first static line
-        self.line_layers.append(self.text_layer_ability)
-        self.text.append(
-            FormattedTextField(
-                layer=self.text_layer_ability,
-                contents=self.layout.class_lines[0]["text"],
-            )
-        )
+    # endregion Vertical Right
 
-        # Add text fields for each line and class stage
-        for i, line in enumerate(self.layout.class_lines[1:]):
-            # Create a new ability line
-            line_layer = self.text_layer_ability.duplicate()
-            self.line_layers.append(line_layer)
-
-            # Use existing stage divider or create new one
-            stage = self.stage_group if i == 0 else self.stage_group.duplicate()
-            cost, level = [*stage.artLayers][:2]
-            self.stage_layers.append(stage)
-
-            # Add text layers to be formatted
-            self.text.extend(
-                [
-                    FormattedTextField(layer=line_layer, contents=line["text"]),
-                    FormattedTextField(
-                        layer=cost,
-                        contents=f"{line['cost']}:",
-                        # the whole function had to be overridden to set this color kwarg
-                        color=rgb_white(),
-                    ),
-                    TextField(layer=level, contents=f"Level {line['level']}"),
-                ]
-            )
-
-    """
-    * Saga
-    """
+    # region Saga
 
     def frame_layers_saga(self):
-        if self.saga_group:
-            self.saga_group.visible = True
         if layer := getLayerSet(LAYERS.SAGA, [self.pinlines_group, LAYERS.SHAPE]):
             layer.visible = True
+        return super().frame_layers_saga()
 
-    # TODO Submit the icon generation officially to Proxyshop to avoid this ugly copy paste
-    def text_layers_saga(self):
-        # Add description text with reminder
-        self.text.append(
-            FormattedTextArea(
-                layer=self.text_layer_reminder,
-                contents=self.layout.saga_description,
-                reference=self.reminder_reference,
-            )
-        )
-
-        # Iterate through each saga stage and add line to text layers
-        for i, line in enumerate(self.layout.saga_lines):
-            # Generate icon layers for this ability
-            icon_ref = getLayerSet(LAYER_NAMES.ICON, self.saga_group)
-            if icon_ref:
-                icons: list[LayerSet] = []
-                if text_ref := getLayer(LAYERS.TEXT, [icon_ref]):
-                    for n in line["icons"]:
-                        text_ref.textItem.contents = n
-                        duplicate = icon_ref.duplicate()
-                        icons.append(duplicate)
-                self.icon_layers.append(icons)
-
-            # Add ability text for this ability
-            layer = (
-                self.text_layer_ability
-                if i == 0
-                else self.text_layer_ability.duplicate()
-            )
-            self.ability_layers.append(layer)
-            self.text.append(FormattedTextField(layer=layer, contents=line["text"]))
+    # endregion Saga
