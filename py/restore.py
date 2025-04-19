@@ -1,10 +1,6 @@
 import os
 import re
-import tkinter as tk
-from collections.abc import Iterable
-from concurrent import futures
-from tkinter.filedialog import askopenfile
-from typing import Any, Callable, Pattern
+from typing import Callable, Pattern
 
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
@@ -13,6 +9,8 @@ from photoshop.api.enumerations import ChannelType, ElementPlacement
 
 from src import APP, CFG, CONSOLE
 from src.templates import BaseTemplate
+
+from .gui import open_ask_file_dialog
 
 
 def find_file_in_directory(
@@ -23,20 +21,6 @@ def find_file_in_directory(
         if re.search(pattern, file, flags=re.IGNORECASE):
             return file
     return None
-
-
-def open_ask_file_dialog(
-    filetypes: Iterable[tuple[str, str | list[str] | tuple[str, ...]]] | None = [
-        ("PSD", "psd")
-    ],
-    *args: Any,
-    **kwargs: Any,
-):
-    root = tk.Tk()
-    root.withdraw()
-    file = askopenfile(filetypes=filetypes, *args, **kwargs)
-    root.destroy()
-    return file.name if file else None
 
 
 def find_layer(
@@ -97,15 +81,8 @@ def load_old_artwork(instance: BaseTemplate):
                 f"{instance.layout.name.strip().lower().replace(' ', '*')}*",
             ),
         )
-    with futures.ThreadPoolExecutor() as executor:
-        future = executor.submit(
-            open_ask_file_dialog,
-            initialdir=directory_path,
-            filetypes=filetypes,
-        )
-        file = future.result()
 
-    if file:
+    if file := open_ask_file_dialog(initialdir=directory_path, filetypes=filetypes):
 
         def is_art_layer(art_layer: ArtLayer):
             return bool(re.match(r"^(Generative )?Layer [0-9]+", art_layer.name))

@@ -102,11 +102,38 @@ desc = """When enabled, flips name and type pinlines horizontally. Mainly meant 
 type = "bool"
 default = 0
 
+[BACKUP]
+title = "Backup Options"
+
+[BACKUP."Save"]
+title = "Save a backup"
+desc = "When enabled, saves a partial backup of the rendered template. Mainly meant to preserve popouts."
+type = "bool"
+default = 0
+
+[BACKUP."Load"]
+title = "Load a backup"
+desc = "When enabled, asks to pick a backup file from which backed up data, e.g. art, is loaded."
+type = "bool"
+default = 0
+
+[BACKUP."Directory"]
+title = "Backup directory"
+desc = "The path to a directory to which backups are saved and loaded from. Defaults to './backup' when no set."
+type = "string"
+default = ""
+
+[BACKUP."Art.Prompt"]
+title = "Prompt to save art layer"
+desc = "When enabled, asks if the art layer should be copied to the backup."
+type = "bool"
+default = 0
+
 [OTHER]
 title = "Other Options"
 
 [OTHER."Copy.Art"]
-title = "Copy art from backup"
+title = "Copy art from backup (deprecated)"
 desc = "When enabled, copies artwork and channels from a chosen backup template."
 type = "bool"
 default = 0

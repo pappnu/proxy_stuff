@@ -1,6 +1,6 @@
 from functools import cached_property
 from math import ceil
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Iterable, Literal, Sequence
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -22,6 +22,7 @@ from src.templates.saga import SagaMod
 from src.templates.transform import TransformMod
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
+from .backup import BackupAndRestore
 from .helpers import (
     LAYER_NAMES,
     ExpansionSymbolOverrideMode,
@@ -35,7 +36,7 @@ from .helpers import (
 from .vertical_mod import VerticalMod
 
 
-class BorderlessShowcase(VerticalMod, PlaneswalkerMod):
+class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
     # region settings
 
     @cached_property
@@ -200,6 +201,14 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod):
         return [*super().pre_render_methods, self.override_set_symbol]
 
     # endregion Frame Details
+
+    # region Backup
+
+    @cached_property
+    def layers_to_seek_masks_from(self) -> Iterable[ArtLayer | LayerSet | None]:
+        return (self.pinlines_group,)
+
+    # endregion Backup
 
     # region Colors
 

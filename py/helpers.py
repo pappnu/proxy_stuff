@@ -1,20 +1,23 @@
 import re
 from enum import Enum, StrEnum
 from functools import cached_property
-from typing import Callable
+from typing import Callable, TypeVar
 
 from photoshop.api import ActionDescriptor, ActionReference, DialogModes, SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
 from photoshop.api._layerSet import LayerSet
+from photoshop.api.enumerations import ElementPlacement
 
-import src.helpers as psd
 from src import APP
 from src._config import AppConfig
 from src.console import TerminalConsole
 from src.gui.console import GUIConsole
 from src.helpers.colors import get_color, get_rgb_from_hex
+from src.helpers.layers import select_layer, select_layers
 from src.schema.colors import ColorObject
+
+L = TypeVar("L", bound=ArtLayer | LayerSet)
 
 sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 NO_DIALOG = DialogModes.DisplayNoDialogs
@@ -136,20 +139,57 @@ def paste():
     APP.executeAction(cID("past"), None, NO_DIALOG)
 
 
+def delete():
+    """Same as pressing Del in Photoshop."""
+    APP.executeAction(cID("Dlt "), None, NO_DIALOG)
+
+
+def create_art_layer(
+    name: str | None = None,
+    relative_layer: ArtLayer | LayerSet | None = None,
+    insertion_location: ElementPlacement = ElementPlacement.PlaceBefore,
+) -> ArtLayer:
+    new_layer = APP.activeDocument.artLayers.add()
+    if name is not None:
+        new_layer.name = name
+    if relative_layer:
+        new_layer.move(relative_layer, insertion_location)
+    return new_layer
+
+
+def copy_layer(
+    layer_to_copy: L,
+    name: str | None = None,
+    relative_layer: ArtLayer | LayerSet | Document | None = None,
+    insertion_location: ElementPlacement = ElementPlacement.PlaceBefore,
+) -> L:
+    new_layer: L = layer_to_copy.duplicate(relative_layer, insertion_location)
+    if name is not None:
+        new_layer.name = name
+    return new_layer
+
+
 class FlipDirection(StrEnum):
     Horizontal = "Hrzn"
     Vertical = "Vrtc"
 
 
 def flip_layer(layer: ArtLayer | LayerSet, direction: FlipDirection):
-    psd.select_layer(layer)
+    select_layer(layer)
     desc = ActionDescriptor()
     desc.putEnumerated(cID("Axis"), cID("Ornt"), cID(direction))
     APP.executeAction(cID("Flip"), desc, NO_DIALOG)
 
 
+# https://community.adobe.com/t5/photoshop-ecosystem-discussions/check-if-layer-has-mask/m-p/3702981
+def has_layer_mask(layer: ArtLayer | LayerSet) -> bool:
+    ref = ActionReference()
+    ref.putName(cID("Lyr "), layer.name)
+    return APP.executeActionGet(ref).getBoolean(sID("hasUserMask"))
+
+
 def create_clipping_mask(layer: ArtLayer):
-    psd.select_layer(layer)
+    select_layer(layer)
     desc1 = ActionDescriptor()
     ref1 = ActionReference()
     ref1.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
@@ -165,7 +205,7 @@ def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:
     Returns:
         The merged layer.
     """
-    psd.select_layers([shape_1, shape_2])
+    select_layers([shape_1, shape_2])
 
     desc = ActionDescriptor()
     desc.putEnumerated(sID("shapeOperation"), sID("shapeOperation"), cID("Sbtr"))
@@ -195,9 +235,9 @@ def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
     Returns:
         The layer that the mask was applied to.
     """
-    psd.select_layer(shape)
+    select_layer(shape)
     select_path_component_select_tool()
     copy()
-    psd.select_layer(layer)
+    select_layer(layer)
     paste()
     return layer
