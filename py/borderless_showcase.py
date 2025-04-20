@@ -190,6 +190,14 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
             return LAYER_NAMES.PW3
         return super().size
 
+    @cached_property
+    def ability_text_spacing(self) -> float | int:
+        return 0
+
+    @cached_property
+    def ability_text_scaling_step_sizes(self) -> Sequence[float] | None:
+        return (0.4, 0.1, 0.05)
+
     def override_set_symbol(self) -> None:
         if self.expansion_symbol_color_override is not ExpansionSymbolOverrideMode.Off:
             # Common symbol is used since it can be inverted to get
