@@ -10,13 +10,17 @@ from src import APP, CFG
 from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
+from src.enums.settings import BorderlessTextbox
 from src.helpers.bounds import get_layer_dimensions
 from src.helpers.colors import get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask, copy_layer_mask
+from src.helpers.text import get_line_count
+from src.layouts import AdventureLayout
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
 from src.schema.colors import ColorObject, GradientColor
+from src.templates.adventure import AdventureMod
 from src.templates.planeswalker import PlaneswalkerMod
 from src.templates.saga import SagaMod
 from src.templates.transform import TransformMod
@@ -36,7 +40,7 @@ from .helpers import (
 from .vertical_mod import VerticalMod
 
 
-class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
+class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRestore):
     # region settings
 
     @cached_property
@@ -165,6 +169,10 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
     # region Checks
 
     @cached_property
+    def is_adventure(self) -> bool:
+        return isinstance(self.layout, AdventureLayout)
+
+    @cached_property
     def is_planeswalker(self) -> bool:
         return hasattr(self.layout, "pw_size")
 
@@ -184,6 +192,68 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
 
     @cached_property
     def size(self) -> str:
+        if self.is_adventure:
+            # Get the user's preferred setting
+            size = str(
+                CFG.get_option(
+                    section="FRAME",
+                    key="Textbox.Size",
+                    enum_class=BorderlessTextbox,
+                    default=BorderlessTextbox.Automatic,
+                )
+            )
+
+            # Determine the automatic size
+            if size == BorderlessTextbox.Automatic:
+                size_map: dict[int, BorderlessTextbox] = {
+                    1: BorderlessTextbox.Short,
+                    2: BorderlessTextbox.Medium,
+                    3: BorderlessTextbox.Normal,
+                    4: BorderlessTextbox.Tall,
+                }
+
+                # Determine size for left textbox
+                test_layer = self.text_layer_rules_adventure
+                test_text = self.layout.oracle_text_adventure
+                if self.layout.flavor_text_adventure:
+                    test_text += f"\r{self.layout.flavor_text_adventure}"
+                test_layer.textItem.contents = test_text.replace("\n", "\r")
+
+                num = get_line_count(test_layer, self.docref)
+                if self.layout.flavor_text:
+                    num += 1
+
+                if num < 4:
+                    size_left = 1
+                elif num < 6:
+                    size_left = 2
+                elif num < 8:
+                    size_left = 3
+                else:
+                    size_left = 4
+
+                # Determine size for right textbox
+                test_layer = self.text_layer_rules
+                test_text = self.layout.oracle_text
+                if self.layout.flavor_text:
+                    test_text += f"\r{self.layout.flavor_text}"
+                test_layer.textItem.contents = test_text.replace("\n", "\r")
+
+                num = get_line_count(test_layer, self.docref)
+                if self.layout.flavor_text:
+                    num += 1
+
+                if num < 12:
+                    size_right = 1
+                elif num < 14:
+                    size_right = 2
+                elif num < 16:
+                    size_right = 3
+                else:
+                    size_right = 4
+
+                # Final size is the biggest required
+                return size_map[max(size_left, size_right)]
         if self.is_planeswalker:
             if self.layout.pw_size > 3:
                 return LAYER_NAMES.PW4
@@ -282,16 +352,28 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
             return layer
         raise Exception("Couldn't get text group.")
 
+    @cached_property
+    def rules_text_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.TALL, self.text_group)
+
+    @cached_property
+    def textbox_reference_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group)
+
+    @cached_property
+    def adventure_pinlines_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.ADVENTURE, self.pinlines_group)
+
     # endregion Groups
 
     # region Reference Layers
 
     @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
-        if self.is_planeswalker:
+        if self.is_adventure or self.is_planeswalker:
             ref = get_reference_layer(
-                self.size,
-                getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group),
+                f"{f'{LAYERS.ADVENTURE} {LAYERS.RIGHT} - ' if self.is_adventure else ''}{self.size}",
+                self.textbox_reference_group,
             )
             if (
                 ref
@@ -307,6 +389,13 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
                 ref.visible = False
             return ref
         return super().textbox_reference
+
+    @cached_property
+    def textbox_reference_adventure(self) -> ArtLayer | None:
+        return get_reference_layer(
+            f"{LAYERS.ADVENTURE} {LAYERS.LEFT} - {self.size}",
+            self.textbox_reference_group,
+        )
 
     # endregion Reference Layers
 
@@ -464,19 +553,59 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
 
     # endregion Masks
 
+    # region Frame
+
+    @cached_property
+    def frame_layer_methods(self) -> list[Callable[[], None]]:
+        methods = super().frame_layer_methods
+        if self.is_adventure:
+            methods.append(self.enable_adventure_layers)
+        return methods
+
+    # endregion Frame
+
     # region Text
 
     @cached_property
-    def text_layer_ability(self) -> ArtLayer:
+    def text_layer_ability(self) -> ArtLayer | None:
         if self.is_planeswalker:
             return super(SagaMod, self).text_layer_ability
         return super().text_layer_ability
+
+    @cached_property
+    def text_layer_rules(self) -> ArtLayer | None:
+        if self.is_adventure:
+            return getLayer(
+                f"{LAYERS.RULES_TEXT_CREATURE if self.is_creature else LAYERS.RULES_TEXT_NONCREATURE} - {LAYERS.ADVENTURE}",
+                self.rules_text_group,
+            )
+        return getLayer(self.text_layer_rules_name, [self.text_group, LAYERS.TALL])
 
     @cached_property
     def text_layer_flipside_pt(self) -> ArtLayer | None:
         if self.is_layout_saga:
             return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, self.saga_group)
         return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, self.text_group)
+
+    @cached_property
+    def text_layer_name_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.NAME_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_mana_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.MANA_COST_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_type_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.TYPE_LINE_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_rules_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.RULES_TEXT_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def divider_layer_adventure(self) -> ArtLayer | None:
+        return None
 
     def expansion_symbol_handler(self) -> None:
         if self.expansion_symbol_layer:
@@ -587,6 +716,16 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
             if self.is_type_shifted and self.indicator_group:
                 self.indicator_group.parent.translate(0, delta)
 
+            if self.is_adventure:
+                for layer in (
+                    self.text_layer_name_adventure,
+                    self.text_layer_mana_adventure,
+                    self.text_layer_type_adventure,
+                    self.adventure_pinlines_group,
+                ):
+                    if layer:
+                        layer.translate(0, delta)
+
     def pw_enable_loyalty_graphics(self) -> None:
         if self.is_planeswalker:
             self.loyalty_group.visible = True
@@ -638,6 +777,20 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, BackupAndRestore):
         pass
 
     # endregion MDFC Methods
+
+    # region Adventure
+
+    def enable_adventure_layers(self) -> None:
+        if self.adventure_pinlines_group:
+            self.adventure_pinlines_group.visible = True
+            self.generate_layer(
+                group=self.adventure_pinlines_group,
+                colors=self.pinlines_color_map.get(
+                    "".join(self.layout.color_identity_adventure)
+                ),
+            )
+
+    # endregion Adventure
 
     # region Vertical Right
 
