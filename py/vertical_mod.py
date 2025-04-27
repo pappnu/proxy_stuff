@@ -122,8 +122,12 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
         if self.is_vertical_layout:
+            # If the full height layer doesn't exist, try to fall back to the normal layer
             return get_reference_layer(
                 f"{LAYERS.TEXTBOX_REFERENCE}{'' if not self.is_case_layout and self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
+                self.vertical_group,
+            ) or get_reference_layer(
+                f"{LAYERS.TEXTBOX_REFERENCE}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
                 self.vertical_group,
             )
         return super().textbox_reference
@@ -248,25 +252,25 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             self.text_layer_reminder.visible = False
 
         # Iterate through each saga stage and add line to text layers
-        for i, line in enumerate(self.layout.saga_lines):
-            # Generate icon layers for this ability
-            icon_ref = getLayerSet(LAYER_NAMES.ICON, self.saga_group)
-            if icon_ref:
+        if (icon_ref := getLayerSet(LAYER_NAMES.ICON, self.saga_group)) and (
+            text_ref := getLayer(LAYERS.TEXT, [icon_ref])
+        ):
+            for i, line in enumerate(self.layout.saga_lines):
+                # Generate icon layers for this ability
                 icons: list[LayerSet] = []
-                if text_ref := getLayer(LAYERS.TEXT, [icon_ref]):
-                    for n in line["icons"]:
-                        text_ref.textItem.contents = n
-                        duplicate = icon_ref.duplicate()
-                        icons.append(duplicate)
+                for n in line["icons"]:
+                    text_ref.textItem.contents = n
+                    duplicate = icon_ref.duplicate()
+                    icons.append(duplicate)
                 self.icon_layers.append(icons)
 
-            # Add ability text for this ability
-            layer = (
-                self.text_layer_ability
-                if i == 0
-                else self.text_layer_ability.duplicate()
-            )
-            self.ability_layers.append(layer)
-            self.text.append(FormattedTextField(layer=layer, contents=line["text"]))
+                # Add ability text for this ability
+                layer = (
+                    self.text_layer_ability
+                    if i == 0
+                    else self.text_layer_ability.duplicate()
+                )
+                self.ability_layers.append(layer)
+                self.text.append(FormattedTextField(layer=layer, contents=line["text"]))
 
     # endregion Saga
