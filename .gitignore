@@ -1,3 +1,4 @@
 __pycache__/
 config_ini/
 templates/
+_temp.*

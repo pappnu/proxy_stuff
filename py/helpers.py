@@ -33,6 +33,7 @@ class LAYER_NAMES(StrEnum):
     PW3 = "pw-3"
     PW4 = "pw-4"
     VERTICAL = "Vertical"
+    TEXT_REFERENCE = "Text Reference"
 
 
 class ExpansionSymbolOverrideMode(Enum):

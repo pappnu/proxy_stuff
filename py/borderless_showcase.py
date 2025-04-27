@@ -5,6 +5,7 @@ from typing import Any, Callable, Iterable, Literal, Sequence
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
+from photoshop.api.enumerations import ElementPlacement
 
 from src import APP, CFG
 from src.enums.adobe import Dimensions
@@ -37,6 +38,8 @@ from .helpers import (
     is_color_identity,
     parse_hex_color_list,
 )
+from .uxp.shape import ShapeOperation, merge_shapes
+from .uxp.text import create_text_layer_with_path
 from .vertical_mod import VerticalMod
 
 
@@ -180,6 +183,10 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
     def is_pt_enabled(self) -> bool:
         return self.is_creature
 
+    @cached_property
+    def has_flipside_pt(self) -> bool:
+        return self.is_transform and self.is_flipside_creature
+
     # endregion Checks
 
     # region Frame Details
@@ -267,6 +274,11 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
     @cached_property
     def ability_text_scaling_step_sizes(self) -> Sequence[float] | None:
         return (0.4, 0.1, 0.05)
+
+    def process_layout_data(self) -> None:
+        if self.is_vertical_creature:
+            CFG.symbol_enabled = False
+        return super().process_layout_data()
 
     def override_set_symbol(self) -> None:
         if self.expansion_symbol_color_override is not ExpansionSymbolOverrideMode.Off:
@@ -369,6 +381,21 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
     # region Reference Layers
 
     @cached_property
+    def pt_text_reference(self) -> ReferenceLayer | None:
+        layer_name: str | None = None
+        if self.is_creature:
+            layer_name = (
+                f"{LAYERS.PT_REFERENCE}{' - Flipside' if self.has_flipside_pt else ''}"
+            )
+        elif self.has_flipside_pt:
+            layer_name = f"{LAYERS.PT_REFERENCE} - Noncreature Flipside"
+        if layer_name:
+            return get_reference_layer(
+                layer_name,
+                self.text_group,
+            )
+
+    @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
         if self.is_adventure or self.is_planeswalker:
             ref = get_reference_layer(
@@ -460,7 +487,6 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         # Name
         if (
             self.flip_twins
-            and not (self.is_transform or self.is_mdfc)
             and (
                 layer_set := getLayerSet(
                     LAYERS.NORMAL,
@@ -471,14 +497,17 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         ):
             dims = get_layer_dimensions(layer)
             delta = APP.activeDocument.width - 2 * dims[Dimensions.CenterX]
-            layer.translate(delta, 0)
-            flip_layer(layer, FlipDirection.Horizontal)
-            layers.append(layer_set)
-        elif layer := getLayerSet(
-            LAYERS.TRANSFORM
-            if self.is_transform
-            else (LAYERS.MDFC if self.is_mdfc else LAYERS.NORMAL),
-            [_shape_group, LAYERS.NAME],
+            if not (self.is_transform or self.is_mdfc):
+                layer.translate(delta, 0)
+                flip_layer(layer, FlipDirection.Horizontal)
+                layers.append(layer_set)
+        if (self.is_transform or self.is_mdfc) and (
+            layer := getLayerSet(
+                LAYERS.TRANSFORM
+                if self.is_transform
+                else (LAYERS.MDFC if self.is_mdfc else LAYERS.NORMAL),
+                [_shape_group, LAYERS.NAME],
+            )
         ):
             layers.append(layer)
 
@@ -573,13 +602,37 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         return super().text_layer_ability
 
     @cached_property
+    def text_layer_rules_name(self) -> str:
+        return f"{LAYERS.RULES_TEXT}{f' - {LAYERS.ADVENTURE} {LAYERS.RIGHT}' if self.is_adventure else ''}"
+
+    @cached_property
+    def text_wrap_reference(self) -> ArtLayer | None:
+        return getLayer(
+            f"{LAYER_NAMES.TEXT_REFERENCE}{f' - {LAYERS.ADVENTURE}' if self.is_adventure else ''}",
+            (self.text_group, LAYERS.TALL),
+        )
+
+    @cached_property
     def text_layer_rules(self) -> ArtLayer | None:
-        if self.is_adventure:
-            return getLayer(
-                f"{LAYERS.RULES_TEXT_CREATURE if self.is_creature else LAYERS.RULES_TEXT_NONCREATURE} - {LAYERS.ADVENTURE}",
-                self.rules_text_group,
+        layer = getLayer(
+            self.text_layer_rules_name,
+            self.rules_text_group,
+        )
+        if (
+            self.size != LAYERS.TEXTLESS
+            and layer
+            and self.text_wrap_reference
+            and self.pt_text_reference
+            and (self.is_creature or self.has_flipside_pt)
+        ):
+            pt_ref_copy = self.pt_text_reference.duplicate(
+                self.text_wrap_reference, ElementPlacement.PlaceBefore
             )
-        return getLayer(self.text_layer_rules_name, [self.text_group, LAYERS.TALL])
+            textbox_ref_shape = merge_shapes(
+                pt_ref_copy, self.text_wrap_reference, ShapeOperation.SubtractFront
+            )
+            layer = create_text_layer_with_path(textbox_ref_shape, layer)
+        return layer
 
     @cached_property
     def text_layer_flipside_pt(self) -> ArtLayer | None:

@@ -21,6 +21,12 @@ A version of [Proxyshop](https://github.com/Investigamer/Proxyshop) that matches
     or download and extract the folder in [this archive](https://github.com/pappnu/proxy_stuff/archive/refs/heads/main.zip) to your plugins folder. Rename the extracted folder as `proxy_stuff`.
 2. Download the templates via Proxyshop's updater.
 
+## Troubleshooting
+
+### Confirmation dialog halts the rendering
+
+If you get a confirmation dialog that says "This opeartion will turn a live shape into a regular path. Continue?", tick the "Don't show again" checkbox and press "Yes". Then try rendering the card again.
+
 ## Licence
 
 MIT
