@@ -18,7 +18,7 @@ from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import apply_mask, copy_layer_mask
 from src.helpers.text import get_line_count
-from src.layouts import AdventureLayout
+from src.layouts import AdventureLayout, PlaneswalkerLayout
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
 from src.schema.colors import ColorObject, GradientColor
 from src.templates.adventure import AdventureMod
@@ -177,7 +177,7 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def is_planeswalker(self) -> bool:
-        return hasattr(self.layout, "pw_size")
+        return isinstance(self.layout, PlaneswalkerLayout)
 
     @cached_property
     def is_pt_enabled(self) -> bool:
@@ -614,6 +614,9 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def text_layer_rules(self) -> ArtLayer | None:
+        if self.is_vertical_layout:
+            return super().text_layer_rules
+
         layer = getLayer(
             self.text_layer_rules_name,
             self.rules_text_group,
