@@ -70,32 +70,6 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         )
 
     @cached_property
-    def pt_box_and_bottom_pinline_type(self) -> Literal["Full", "Partial", "Split"]:
-        setting = CFG.get_setting(
-            section="SHAPES", key="PT.Box.And.Pinline", default="Full", is_bool=False
-        )
-        if setting in ("Full", "Partial", "Split"):
-            return setting
-        raise ValueError(
-            f"Received invalid value for PT box and bottom pinline type: {setting}"
-        )
-
-    @cached_property
-    def bottom_border_type(self) -> Literal["Full", "Fade", "Shadow"] | None:
-        setting = CFG.get_setting(
-            section="SHAPES", key="Bottom.Border", default="Full", is_bool=False
-        )
-        if setting in ("Full", "Fade", "Shadow"):
-            return setting
-        if setting == "None":
-            return None
-        raise ValueError(f"Received invalid value for bottom border type: {setting}")
-
-    @cached_property
-    def flip_twins(self) -> bool:
-        return bool(CFG.get_setting(section="SHAPES", key="Flip.Twins", default=False))
-
-    @cached_property
     def pinlines_color_override(self) -> list[SolidColor]:
         if (
             setting := CFG.get_setting(
@@ -166,6 +140,32 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         ) and isinstance(setting, str):
             return setting
         return "linear"
+
+    @cached_property
+    def pt_box_and_bottom_pinline_type(self) -> Literal["Full", "Partial", "Split"]:
+        setting = CFG.get_setting(
+            section="SHAPES", key="PT.Box.And.Pinline", default="Full", is_bool=False
+        )
+        if setting in ("Full", "Partial", "Split"):
+            return setting
+        raise ValueError(
+            f"Received invalid value for PT box and bottom pinline type: {setting}"
+        )
+
+    @cached_property
+    def bottom_border_type(self) -> Literal["Full", "Fade", "Shadow"] | None:
+        setting = CFG.get_setting(
+            section="SHAPES", key="Bottom.Border", default="Full", is_bool=False
+        )
+        if setting in ("Full", "Fade", "Shadow"):
+            return setting
+        if setting == "None":
+            return None
+        raise ValueError(f"Received invalid value for bottom border type: {setting}")
+
+    @cached_property
+    def flip_twins(self) -> bool:
+        return bool(CFG.get_setting(section="SHAPES", key="Flip.Twins", default=False))
 
     # endregion settings
 
