@@ -156,10 +156,13 @@ def create_text_layer_with_path(
     """Creates a shaped text layer, which aims to mimic the properties of reference_text layer."""
     select_layer(reference_path, make_visible=True)
 
-    layer_path: Any
+    layer_path: Any = None
     for path in APP.activeDocument.pathItems:
         if path.name == f"{reference_path.name} Shape Path":
             layer_path = path
+
+    if not layer_path:
+        layer_path = APP.activeDocument.pathItems[-1]
 
     points: list[PathPointDescriptor] = []
     for sub_path in layer_path.subPathItems:

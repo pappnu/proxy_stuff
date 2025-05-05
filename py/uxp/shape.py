@@ -29,10 +29,9 @@ class CombineShapeComponentsDescriptor(ActionDescriptor):
     _obj: Literal["combine"]
 
 
-def merge_shapes(
-    shape_a: ArtLayer, shape_b: ArtLayer, operation: ShapeOperation
-) -> ArtLayer:
-    select_layers([shape_a, shape_b])
+def merge_shapes(*args: ArtLayer, operation: ShapeOperation) -> ArtLayer:
+    """Merges shapes, consuming the shapes that are earlier in the document order."""
+    select_layers([*args])
     desc: MergeShapesDescriptor = {
         "_obj": "mergeLayersNew",
         "shapeOperation": {"_enum": "shapeOperation", "_value": operation},

@@ -1,3 +1,0 @@
-const ps = require("photoshop");
-async function doBatchPlay() { return await ps.action.batchPlay([{}], {}); }
-await ps.core.executeAsModal(doBatchPlay, { commandName: "Programmatic Batch Play" });

@@ -1,4 +1,6 @@
 __pycache__/
+node_modules/
 config_ini/
 templates/
 _temp.*
+dist/

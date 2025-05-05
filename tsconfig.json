@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "rootDir": "./js",
+        "outDir": "./dist",
+        "noImplicitAny": true,
+        "module": "CommonJS",
+        "target": "ES2017",
+        "allowJs": true,
+        "moduleResolution": "node"
+    },
+    "include": ["js/**/*"]
+}

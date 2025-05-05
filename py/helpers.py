@@ -1,7 +1,7 @@
 import re
 from enum import Enum, StrEnum
 from functools import cached_property
-from typing import Callable, TypeVar
+from typing import Callable, Iterable, TypeVar
 
 from photoshop.api import ActionDescriptor, ActionReference, DialogModes, SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -13,9 +13,11 @@ from src import APP
 from src._config import AppConfig
 from src.console import TerminalConsole
 from src.gui.console import GUIConsole
-from src.helpers.colors import get_color, get_rgb_from_hex
+from src.helpers.colors import get_color, get_rgb_from_hex, rgb_black
 from src.helpers.layers import select_layer, select_layers
 from src.schema.colors import ColorObject
+
+from .uxp.path import PathPointConf, create_path
 
 L = TypeVar("L", bound=ArtLayer | LayerSet)
 
@@ -33,7 +35,9 @@ class LAYER_NAMES(StrEnum):
     PW3 = "pw-3"
     PW4 = "pw-4"
     VERTICAL = "Vertical"
+    REFERENCE = "Reference"
     TEXT_REFERENCE = "Text Reference"
+    OVERFLOW_REFERENCE = "Overflow Reference"
 
 
 class ExpansionSymbolOverrideMode(Enum):
@@ -241,4 +245,52 @@ def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
     copy()
     select_layer(layer)
     paste()
+    return layer
+
+
+def deselect_all_layers() -> None:
+    desc = ActionDescriptor()
+    ref = ActionReference()
+    ref.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
+    desc.putReference(cID("null"), ref)
+    APP.executeAction(sID("selectNoLayers"), desc, NO_DIALOG)
+
+
+def create_shape_layer(
+    points: Iterable[PathPointConf],
+    name: str = "",
+    relative_layer: ArtLayer | LayerSet | None = None,
+    placement: ElementPlacement = ElementPlacement.PlaceAfter,
+    hide: bool = False,
+    color: ColorObject | None = None,
+) -> ArtLayer:
+    solid_color = get_color(color) if color else rgb_black()
+    docref = APP.activeDocument
+
+    create_path(points)
+
+    # Convert path to a layer
+    ref1 = ActionReference()
+    desc1 = ActionDescriptor()
+    desc2 = ActionDescriptor()
+    desc3 = ActionDescriptor()
+    desc4 = ActionDescriptor()
+    ref1.putClass(sID("contentLayer"))
+    desc1.putReference(sID("target"), ref1)
+    desc4.putDouble(sID("red"), solid_color.rgb.red)
+    desc4.putDouble(sID("green"), solid_color.rgb.green)
+    desc4.putDouble(sID("blue"), solid_color.rgb.blue)
+    desc3.putObject(sID("color"), sID("RGBColor"), desc4)
+    desc2.putObject(sID("type"), sID("solidColorLayer"), desc3)
+    desc1.putObject(sID("using"), sID("contentLayer"), desc2)
+    APP.executeAction(sID("make"), desc1, NO_DIALOG)
+
+    layer: ArtLayer = docref.activeLayer
+    if name:
+        layer.name = name
+    if hide:
+        layer.visible = False
+    if relative_layer:
+        layer.move(relative_layer, placement)
+
     return layer
