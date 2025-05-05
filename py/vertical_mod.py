@@ -188,8 +188,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def frame_layers_classes(self) -> None:
         if self.class_group:
             self.class_group.visible = True
-        if not self.show_vertical_reminder_text and self.reminder_divider_layer:
-            self.reminder_divider_layer.visible = False
+        if not self.show_vertical_reminder_text:
+            if self.text_layer_reminder:
+                self.text_layer_reminder.visible = False
+            if self.reminder_divider_layer:
+                self.reminder_divider_layer.visible = False
         elif self.text_layer_reminder:
             self.text_layer_reminder.visible = True
 
