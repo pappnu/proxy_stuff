@@ -1144,11 +1144,15 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
         super().rules_text_and_pt_layers()
 
-        if self.supports_dynamic_textbox_height and self.rules_text_font_size:
+        if (
+            self.supports_dynamic_textbox_height
+            and self.rules_text_font_size
+            and self.text_layer_rules
+        ):
+            # Ensure that rules text font size won't be adjusted
             for entry in self.text:
                 if (
                     isinstance(entry, FormattedTextArea)
-                    and self.text_layer_rules
                     and entry.layer is self.text_layer_rules
                 ):
                     set_text_size_and_leading(
@@ -1268,6 +1272,31 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
                     "".join(self.layout.color_identity_adventure)
                 ),
             )
+
+    def text_layers_adventure(self) -> None:
+        super().text_layers_adventure()
+
+        if self.rules_text_font_size and self.text_layer_rules_adventure:
+            # Ensure that rules text font size won't be adjusted
+            for entry in self.text:
+                if (
+                    isinstance(entry, FormattedTextArea)
+                    and entry.layer is self.text_layer_rules_adventure
+                ):
+                    set_text_size_and_leading(
+                        self.text_layer_rules_adventure,
+                        self.rules_text_font_size,
+                        self.rules_text_font_size,
+                    )
+                    entry.kwargs.update(
+                        {
+                            "scale_height": False,
+                            "scale_width": False,
+                            "fix_overflow_height": False,
+                            "fix_overflow_width": False,
+                        }
+                    )
+                    break
 
     def match_adventure_font_sizes(self) -> None:
         """Sets the same font size for both Adventure rules texts."""
