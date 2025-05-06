@@ -9,16 +9,21 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
 
 ## Requirements
 
-A version of [Proxyshop](https://github.com/Investigamer/Proxyshop) that matches it's main-branch and has all of my pull requests merged to it (not all of them are vital, but this is the setup I test my plugin with). There's an [unofficial build](https://github.com/alex-taxiera/Proxyshop/releases) available that should fulfill this criteria.
+- A version of [Proxyshop](https://github.com/Investigamer/Proxyshop) that matches it's main-branch and has all of my pull requests merged to it (not all of them are vital, but this is the setup I test my plugin with). There's an [unofficial build](https://github.com/alex-taxiera/Proxyshop/releases) available that should fulfill this criteria.
+- Photoshop 23.5 or newer
 
 ## Installation
 
-1. Clone this repository to your Proxyshop installation's plugins folder.
-    ```sh
-    cd "/path/to/your/MTG-Proxyshop/plugins"
-    git clone --depth 1 https://github.com/pappnu/proxy_stuff.git
+1. Download the latest [release](https://github.com/pappnu/proxy_stuff/releases) and extract the archive to your plugins folder (`/path/to/your/Proxyshop/plugins/`). You should end up with the following file structure:
     ```
-    or download and extract the folder in [this archive](https://github.com/pappnu/proxy_stuff/archive/refs/heads/main.zip) to your plugins folder. Rename the extracted folder as `proxy_stuff`.
+    Proxyshop
+    ├── plugins
+    │   └── proxy_stuff
+    │       ├── manifest.yml
+    │       └── ...
+    ├── Proxyshop.exe
+    └── ...
+    ```
 2. Download the templates via Proxyshop's updater.
 
 ## Troubleshooting
@@ -26,6 +31,20 @@ A version of [Proxyshop](https://github.com/Investigamer/Proxyshop) that matches
 ### Confirmation dialog halts the rendering
 
 If you get a confirmation dialog that says "This opeartion will turn a live shape into a regular path. Continue?", tick the "Don't show again" checkbox and press "Yes". Then try rendering the card again.
+
+## Development environment
+
+Node.js is required in addition to the basic requirements.
+
+Install dependencies
+```
+npm install
+```
+
+Transpile scripts
+```
+npm run build
+```
 
 ## Licence
 
