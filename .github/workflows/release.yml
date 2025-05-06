@@ -45,10 +45,16 @@ jobs:
           cp -r config dist py LICENSE manifest.yml README.md proxy_stuff
           zip -r "./${ARCHIVE_NAME}" proxy_stuff
 
+      - name: Create release tag
+        run: |
+          git tag -f ${NOW}
+          git push origin ${NOW}
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           name: "${{ env.NOW }}-${{ env.SHORT_SHA }}"
           files: ${{ env.ARCHIVE_NAME }}
+          tag_name: ${{ env.NOW }}
           fail_on_unmatched_files: true
           generate_release_notes: true
