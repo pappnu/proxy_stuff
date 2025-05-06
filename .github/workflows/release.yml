@@ -42,7 +42,7 @@ jobs:
       - name: Package
         run: |
           mkdir proxy_stuff
-          cp config dist py LICENSE manifest.yml README.md proxy_stuff
+          cp -r config dist py LICENSE manifest.yml README.md proxy_stuff
           zip -r "./${ARCHIVE_NAME}" proxy_stuff
 
       - name: Release
