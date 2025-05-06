@@ -426,6 +426,12 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
     # region Reference Layers
 
     @cached_property
+    def type_reference(self) -> ReferenceLayer | ArtLayer | None:
+        if self.size == BorderlessTextbox.Textless and self.is_pt_enabled:
+            return self.pt_reference
+        return super().type_reference
+
+    @cached_property
     def pt_text_reference(self) -> ReferenceLayer | None:
         """Offsets PT box and flipside PT text."""
         layer_name: str | None = None
