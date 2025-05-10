@@ -31,6 +31,8 @@ class CombineShapeComponentsDescriptor(ActionDescriptor):
 
 def merge_shapes(*args: ArtLayer, operation: ShapeOperation) -> ArtLayer:
     """Merges shapes, consuming the shapes that are earlier in the document order."""
+    for layer in args:
+        layer.visible = True
     select_layers([*args])
     desc: MergeShapesDescriptor = {
         "_obj": "mergeLayersNew",

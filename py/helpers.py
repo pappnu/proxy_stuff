@@ -28,6 +28,7 @@ NO_DIALOG = DialogModes.DisplayNoDialogs
 class LAYER_NAMES(StrEnum):
     ARROW = "Arrow"
     ABILITY_DIVIDERS = "Ability Dividers"
+    BATTLE = "Battle"
     CARD_NAME = "Card Name"
     ICON = "Icon"
     SHADOW = "Shadow"
