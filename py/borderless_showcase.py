@@ -749,12 +749,6 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         layers: list[LayerObjectTypes] = []
 
         # Name
-        if self.flip_twins and self.name_normal_pinline_shape:
-            # Flip horizontally
-            if not (self.is_transform or self.is_mdfc):
-                self.name_normal_pinline_shape.translate(self.twins_horizontal_delta, 0)
-                flip_layer(self.name_normal_pinline_shape, FlipDirection.Horizontal)
-                layers.append(self.name_normal_pinline_shape)
         if (self.is_transform or self.is_mdfc) and (
             layer := getLayerSet(
                 LAYERS.TRANSFORM
@@ -764,6 +758,12 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
             )
         ):
             layers.append(layer)
+        elif self.name_normal_pinline_shape:
+            # Flip horizontally
+            if self.flip_twins and not (self.is_transform or self.is_mdfc):
+                self.name_normal_pinline_shape.translate(self.twins_horizontal_delta, 0)
+                flip_layer(self.name_normal_pinline_shape, FlipDirection.Horizontal)
+            layers.append(self.name_normal_pinline_shape)
 
         # Add nickname pinlines if required
         if self.is_nickname:
