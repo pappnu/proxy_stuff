@@ -43,19 +43,19 @@ default = ""
 title = "Darken expansion symbol gradient ends"
 desc = """Darkens the first and last override color in the expansion symbol gradient. Specify as a value between 0-100."""
 type = "numeric"
-default = 0
+default = 0.0
 
 [COLORS."Expansion.Symbol.Angle"]
 title = "Expansion symbol gradient angle"
 desc = """The angle to use for the expansion symbol color gradient. Specify as a value between -360-360."""
 type = "numeric"
-default = -45
+default = -45.0
 
 [COLORS."Expansion.Symbol.Scale"]
 title = "Expansion symbol gradient scale"
 desc = """The scale to use for the expansion symbol color gradient. Specify as a value between 10-150."""
 type = "numeric"
-default = 70
+default = 70.0
 
 [COLORS."Expansion.Symbol.Method"]
 title = "Expansion symbol gradient method"
@@ -77,19 +77,19 @@ Medium = 866
 Short = 661
 """
 type = "numeric"
-default = 0
+default = 0.0
 
 [TEXT."Rules.Text.Font.Size"]
 title = "Rules text font size"
 desc = "Font size in points to use for rules text, excluding Case, Class, Saga and Planeswalker layouts. The textbox is automatically sized to conform to the chosen font size. This setting overrides the 'Textbox height' setting. Values <= 0 disable this setting."
 type = "numeric"
-default = 0
+default = 0.0
 
 [TEXT."Rules.Text.Padding"]
 title = "Rules text vertical padding"
 desc = "The amount of extra vertical padding in pixels to add to rules text. Applies to Planeswalker cards and to other cards when using 'Rules text font size' setting."
 type = "numeric"
-default = 64
+default = 64.0
 
 [TEXT.Nickname]
 title = "Use Nickname"
