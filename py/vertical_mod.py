@@ -79,6 +79,9 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def process_layout_data(self) -> None:
         if self.is_vertical_creature:
             CFG.remove_flavor = True
+            self.layout.saga_description = (
+                f"{self.layout.ability_text}\n{self.layout.saga_description}"
+            )
         return super().process_layout_data()
 
     # endregion Frame details
