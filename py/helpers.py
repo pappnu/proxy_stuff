@@ -1,7 +1,7 @@
 import re
 from enum import Enum, StrEnum
 from functools import cached_property
-from typing import Callable, Iterable, TypeVar
+from typing import Callable, TypeVar
 
 from photoshop.api import ActionDescriptor, ActionReference, DialogModes, SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -13,11 +13,9 @@ from src import APP
 from src._config import AppConfig
 from src.console import TerminalConsole
 from src.gui.console import GUIConsole
-from src.helpers.colors import get_color, get_rgb_from_hex, rgb_black
-from src.helpers.layers import select_layer, select_layers
+from src.helpers.colors import get_color, get_rgb_from_hex
+from src.helpers.layers import select_layer
 from src.schema.colors import ColorObject
-
-from .uxp.path import PathPointConf, create_path
 
 L = TypeVar("L", bound=ArtLayer | LayerSet)
 
@@ -37,6 +35,7 @@ class LAYER_NAMES(StrEnum):
     PW4 = "pw-4"
     VERTICAL = "Vertical"
     REFERENCE = "Reference"
+    REFERENCES = "References"
     TEXT_REFERENCE = "Text Reference"
     OVERFLOW_REFERENCE = "Overflow Reference"
 
@@ -203,23 +202,6 @@ def create_clipping_mask(layer: ArtLayer):
     APP.executeAction(sID("groupEvent"), desc1, NO_DIALOG)
 
 
-def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:
-    """
-    Subtracts the front shape from the bottom shape. The layers are merged together in the process.
-    The merged shape will have the name of the front shape.
-
-    Returns:
-        The merged layer.
-    """
-    select_layers([shape_1, shape_2])
-
-    desc = ActionDescriptor()
-    desc.putEnumerated(sID("shapeOperation"), sID("shapeOperation"), cID("Sbtr"))
-    APP.executeAction(cID("Mrg2"), desc, NO_DIALOG)
-
-    return APP.activeDocument.activeLayer
-
-
 def select_path_component_select_tool():
     """
     Selects the path component selection tool in Photoshop.
@@ -255,43 +237,3 @@ def deselect_all_layers() -> None:
     ref.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
     desc.putReference(cID("null"), ref)
     APP.executeAction(sID("selectNoLayers"), desc, NO_DIALOG)
-
-
-def create_shape_layer(
-    points: Iterable[PathPointConf],
-    name: str = "",
-    relative_layer: ArtLayer | LayerSet | None = None,
-    placement: ElementPlacement = ElementPlacement.PlaceAfter,
-    hide: bool = False,
-    color: ColorObject | None = None,
-) -> ArtLayer:
-    solid_color = get_color(color) if color else rgb_black()
-    docref = APP.activeDocument
-
-    create_path(points)
-
-    # Convert path to a layer
-    ref1 = ActionReference()
-    desc1 = ActionDescriptor()
-    desc2 = ActionDescriptor()
-    desc3 = ActionDescriptor()
-    desc4 = ActionDescriptor()
-    ref1.putClass(sID("contentLayer"))
-    desc1.putReference(sID("target"), ref1)
-    desc4.putDouble(sID("red"), solid_color.rgb.red)
-    desc4.putDouble(sID("green"), solid_color.rgb.green)
-    desc4.putDouble(sID("blue"), solid_color.rgb.blue)
-    desc3.putObject(sID("color"), sID("RGBColor"), desc4)
-    desc2.putObject(sID("type"), sID("solidColorLayer"), desc3)
-    desc1.putObject(sID("using"), sID("contentLayer"), desc2)
-    APP.executeAction(sID("make"), desc1, NO_DIALOG)
-
-    layer: ArtLayer = docref.activeLayer
-    if name:
-        layer.name = name
-    if hide:
-        layer.visible = False
-    if relative_layer:
-        layer.move(relative_layer, placement)
-
-    return layer

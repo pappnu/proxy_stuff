@@ -49,42 +49,6 @@ class BorderlessVertical(VerticalMod):
     # region Shapes
 
     @cached_property
-    def pinlines_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
-        if self.is_vertical_layout:
-            _shape_group = getLayerSet(LAYERS.SHAPE, self.pinlines_group)
-
-            layers: list[LayerObjectTypes] = []
-
-            # Name
-            if layer := getLayerSet(
-                LAYERS.TRANSFORM
-                if self.is_transform
-                else (LAYERS.MDFC if self.is_mdfc else LAYERS.NORMAL),
-                [_shape_group, LAYERS.NAME],
-            ):
-                layers.append(layer)
-
-            # Add nickname pinlines if required
-            if self.is_nickname:
-                layers.append(getLayerSet(LAYERS.NICKNAME, _shape_group))
-
-            # Typeline
-            if layer := getLayer(
-                LAYER_NAMES.VERTICAL,
-                [_shape_group, LAYERS.TYPE_LINE],
-            ):
-                layers.append(layer)
-
-            # Textbox
-            if layer := getLayer(
-                self.vertical_mode_layer_name, [_shape_group, LAYERS.TEXTBOX]
-            ):
-                layers.append(layer)
-
-            return layers
-        return super().pinlines_shape
-
-    @cached_property
     def twins_shape(self) -> LayerObjectTypes | list[LayerObjectTypes | None] | None:
         if self.is_vertical_layout:
             _shape_group = getLayerSet(LAYERS.SHAPE, self.twins_group)
@@ -96,7 +60,7 @@ class BorderlessVertical(VerticalMod):
                     [_shape_group, LAYERS.NAME],
                 ),
                 getLayer(
-                    LAYER_NAMES.VERTICAL,
+                    LAYERS.TALL if self.has_extra_textbox else LAYER_NAMES.VERTICAL,
                     [_shape_group, LAYERS.TYPE_LINE],
                 ),
             ]
@@ -115,13 +79,23 @@ class BorderlessVertical(VerticalMod):
     def pt_shape(self) -> ArtLayer | None:
         if self.is_vertical_creature:
             return getLayer(
-                f"{LAYERS.PT_BOX} {LAYER_NAMES.VERTICAL}", [self.pt_group, LAYERS.SHAPE]
+                LAYERS.PT_BOX
+                + (f" {LAYER_NAMES.VERTICAL}" if not self.has_extra_textbox else ""),
+                [self.pt_group, LAYERS.SHAPE],
             )
         return None
 
     @cached_property
+    def bottom_curve_shape(self) -> ArtLayer | None:
+        if self.is_vertical_layout and not self.has_extra_textbox:
+            return getLayer(
+                "Curved Fill",
+                self.border_group if isinstance(self.border_group, LayerSet) else None,
+            )
+
+    @cached_property
     def enabled_shapes(self) -> list[ArtLayer | LayerSet | None]:
-        return [*super().enabled_shapes, self.pt_shape]
+        return [*super().enabled_shapes, self.pt_shape, self.bottom_curve_shape]
 
     # endregion Shapes
 
@@ -140,16 +114,18 @@ class BorderlessVertical(VerticalMod):
         return super().border_mask
 
     @cached_property
-    def pinlines_mask(self) -> dict[str, Any]:
+    def pinlines_mask(self) -> dict[str, Any] | None:
         if self.is_vertical_layout:
-            return {
-                "mask": getLayer(
-                    f"{LAYER_NAMES.VERTICAL}{f' {LAYERS.TRANSFORM}' if self.is_transform else ''}",
-                    [self.mask_group, LAYERS.PINLINES],
-                ),
-                "layer": self.pinlines_group,
-                "funcs": [apply_mask_to_layer_fx],
-            }
+            if not self.has_extra_textbox:
+                return {
+                    "mask": getLayer(
+                        f"{LAYER_NAMES.VERTICAL}{f' {LAYERS.TRANSFORM}' if self.is_transform else ''}",
+                        [self.mask_group, LAYERS.PINLINES],
+                    ),
+                    "layer": self.pinlines_group,
+                    "funcs": [apply_mask_to_layer_fx],
+                }
+            return None
         return super().pinlines_mask
 
     # endregion Masks
@@ -164,7 +140,7 @@ class BorderlessVertical(VerticalMod):
 
     @cached_property
     def text_layer_pt(self) -> ArtLayer | None:
-        if self.is_vertical_creature:
+        if self.is_vertical_creature and not self.has_extra_textbox:
             return getLayer(
                 f"{LAYERS.POWER_TOUGHNESS} {LAYER_NAMES.VERTICAL}", [self.text_group]
             )

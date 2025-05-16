@@ -1,5 +1,6 @@
 from functools import cached_property
 
+from photoshop.api import ElementPlacement
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
@@ -13,13 +14,24 @@ from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.saga import SagaMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
-from src.utils.adobe import ReferenceLayer
+from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
-from .helpers import LAYER_NAMES
+from .helpers import (
+    LAYER_NAMES,
+    deselect_all_layers,
+    get_numeric_setting,
+)
+from .utils.path import create_shape_layer, get_shape_dimensions
+from .uxp.shape import ShapeOperation, merge_shapes
+from .uxp.text import create_text_layer_with_path
 
 
 class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # region Settings
+
+    @cached_property
+    def textbox_height(self) -> float | int:
+        return max(get_numeric_setting(CFG, "TEXT", "Textbox.Height", 0), 0)
 
     @cached_property
     def show_vertical_reminder_text(self) -> bool:
@@ -43,6 +55,10 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     @cached_property
     def is_vertical_creature(self) -> bool:
         return self.is_vertical_layout and self.is_creature
+
+    @cached_property
+    def has_extra_textbox(self) -> bool:
+        return bool(self.is_vertical_creature and self.textbox_height)
 
     @cached_property
     def is_pt_enabled(self) -> bool:
@@ -77,16 +93,174 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         return f"{self.layout_keyword}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}"
 
     def process_layout_data(self) -> None:
-        if self.is_vertical_creature:
-            CFG.remove_flavor = True
+        super().process_layout_data()
+
+        if self.is_vertical_creature and not self.textbox_height:
             self.layout.saga_description = (
                 f"{self.layout.ability_text}\n{self.layout.saga_description}"
             )
-        return super().process_layout_data()
+
+    def load_expansion_symbol(self) -> None:
+        # There's no tailored slot in the execution chain to insert the shape creation
+        # so lets just use something that works
+        if self.is_vertical_creature and self.textbox_height:
+            self.create_shapes_for_vertical_creature()
+
+        return super().load_expansion_symbol()
 
     # endregion Frame details
 
+    # region Builders
+
+    def create_shapes_for_vertical_creature(self) -> None:
+        if ref_textbox := getLayer(LAYERS.TALL, (self.textbox_group, LAYERS.SHAPE)):
+            ref_textbox_dims = get_shape_dimensions(ref_textbox)
+            textbox_top = ref_textbox_dims["bottom"] - self.textbox_height
+
+            # Build bottom textbox
+            self.bottom_textbox_shape = create_shape_layer(
+                (
+                    {"x": ref_textbox_dims["left"], "y": textbox_top},
+                    {"x": ref_textbox_dims["right"], "y": textbox_top},
+                    {"x": ref_textbox_dims["right"], "y": ref_textbox_dims["bottom"]},
+                    {"x": ref_textbox_dims["left"], "y": ref_textbox_dims["bottom"]},
+                ),
+                relative_layer=ref_textbox,
+                placement=ElementPlacement.PlaceAfter,
+            )
+
+            if self.text_layer_ability:
+                # Build bottom text layer
+                text_shape = self.bottom_textbox_shape.duplicate()
+                pt_reference = self.pt_reference.duplicate(
+                    relativeObject=text_shape,
+                    insertionLocation=ElementPlacement.PlaceBefore,
+                )
+                text_shape = merge_shapes(
+                    text_shape, pt_reference, operation=ShapeOperation.SubtractFront
+                )
+                self.text_layer_ability_bottom = create_text_layer_with_path(
+                    text_shape, reference_text=self.text_layer_ability
+                )
+                self.text_layer_ability_bottom.move(
+                    relativeObject=self.text_layer_ability,
+                    insertionLocation=ElementPlacement.PlaceAfter,
+                )
+                text_shape.remove()
+
+            if ref_textbox_pinlines := getLayer(
+                LAYERS.TALL, (self.pinlines_group, LAYERS.SHAPE, LAYERS.TEXTBOX)
+            ):
+                ref_textbox_pinlines_dims = get_shape_dimensions(ref_textbox_pinlines)
+                pinlines_top = (
+                    ref_textbox_pinlines_dims["bottom"]
+                    - self.textbox_height
+                    - (ref_textbox_pinlines_dims["height"] - ref_textbox_dims["height"])
+                )
+
+                # Build bottom pinlines
+                self.bottom_textbox_pinlines_shape = create_shape_layer(
+                    (
+                        {"x": ref_textbox_pinlines_dims["left"], "y": pinlines_top},
+                        {"x": ref_textbox_pinlines_dims["right"], "y": pinlines_top},
+                        {
+                            "x": ref_textbox_pinlines_dims["right"],
+                            "y": ref_textbox_pinlines_dims["bottom"],
+                        },
+                        {
+                            "x": ref_textbox_pinlines_dims["left"],
+                            "y": ref_textbox_pinlines_dims["bottom"],
+                        },
+                    ),
+                    relative_layer=ref_textbox_pinlines,
+                    placement=ElementPlacement.PlaceAfter,
+                )
+
+                if (
+                    ref_vertical_textbox := getLayer(
+                        self.vertical_mode_layer_name,
+                        [self.textbox_group, LAYERS.SHAPE],
+                    )
+                ) and (
+                    ref_typeline := getLayer(LAYERS.TYPE_LINE, self.references_group)
+                ):
+                    ref_vertical_textbox_dims = get_shape_dimensions(
+                        ref_vertical_textbox
+                    )
+                    ref_typeline_dims = get_shape_dimensions(ref_typeline)
+                    vertical_textbox_bottom = pinlines_top - ref_typeline_dims["height"]
+
+                    # Build vertical textbox
+                    self.textbox_shape = create_shape_layer(
+                        (
+                            {
+                                "x": ref_vertical_textbox_dims["left"],
+                                "y": ref_vertical_textbox_dims["top"],
+                            },
+                            {
+                                "x": ref_vertical_textbox_dims["right"],
+                                "y": ref_vertical_textbox_dims["top"],
+                            },
+                            {
+                                "x": ref_vertical_textbox_dims["right"],
+                                "y": vertical_textbox_bottom,
+                            },
+                            {
+                                "x": ref_vertical_textbox_dims["left"],
+                                "y": vertical_textbox_bottom,
+                            },
+                        ),
+                        relative_layer=ref_vertical_textbox,
+                        placement=ElementPlacement.PlaceAfter,
+                    )
+
+                    if ref_vertical_pinline := getLayer(
+                        self.vertical_mode_layer_name,
+                        [self.pinlines_group, LAYERS.SHAPE, LAYERS.TEXTBOX],
+                    ):
+                        ref_vertical_pinline_dims = get_shape_dimensions(
+                            ref_vertical_pinline
+                        )
+                        pinline_bottom = vertical_textbox_bottom + (
+                            ref_vertical_textbox_dims["top"]
+                            - ref_vertical_pinline_dims["top"]
+                        )
+
+                        # Build vertical pinline
+                        self.vertical_pinlines_shape = create_shape_layer(
+                            (
+                                {
+                                    "x": ref_vertical_pinline_dims["left"],
+                                    "y": ref_vertical_pinline_dims["top"],
+                                },
+                                {
+                                    "x": ref_vertical_pinline_dims["right"],
+                                    "y": ref_vertical_pinline_dims["top"],
+                                },
+                                {
+                                    "x": ref_vertical_pinline_dims["right"],
+                                    "y": pinline_bottom,
+                                },
+                                {
+                                    "x": ref_vertical_pinline_dims["left"],
+                                    "y": pinline_bottom,
+                                },
+                            ),
+                            relative_layer=ref_vertical_pinline,
+                            placement=ElementPlacement.PlaceAfter,
+                        )
+
+    # endregion Builders
+
     # region Groups
+
+    @cached_property
+    def references_group(self) -> LayerSet | None:
+        return getLayerSet(LAYER_NAMES.REFERENCES)
+
+    @cached_property
+    def textbox_reference_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group)
 
     @cached_property
     def vertical_group(self) -> LayerSet | None:
@@ -125,9 +299,27 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
         if self.is_vertical_layout:
+            if self.has_extra_textbox:
+                return ReferenceLayer(self.textbox_shape)
+
             # If the full height layer doesn't exist, try to fall back to the normal layer
             return get_reference_layer(
-                f"{LAYERS.TEXTBOX_REFERENCE}{'' if not self.is_case_layout and self.show_vertical_reminder_text else ' Full'}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
+                LAYERS.TEXTBOX_REFERENCE
+                + (
+                    ""
+                    if not self.is_case_layout
+                    and (
+                        self.show_vertical_reminder_text
+                        or self.is_vertical_creature
+                        and self.layout.saga_description
+                    )
+                    else " Full"
+                )
+                + (
+                    f" {LAYERS.TRANSFORM_FRONT}"
+                    if self.is_front and self.is_flipside_creature
+                    else ""
+                ),
                 self.vertical_group,
             ) or get_reference_layer(
                 f"{LAYERS.TEXTBOX_REFERENCE}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
@@ -135,7 +327,72 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             )
         return super().textbox_reference
 
+    @cached_property
+    def textbox_bottom_reference(self) -> ReferenceLayer | None:
+        return ReferenceLayer(self.bottom_textbox_shape)
+
     # endregion Reference layers
+
+    # region Shapes
+
+    @cached_property
+    def pinlines_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
+        if self.is_vertical_layout:
+            _shape_group = getLayerSet(LAYERS.SHAPE, self.pinlines_group)
+
+            layers: list[LayerObjectTypes] = []
+
+            # Name
+            if layer := getLayerSet(
+                LAYERS.TRANSFORM
+                if self.is_transform
+                else (LAYERS.MDFC if self.is_mdfc else LAYERS.NORMAL),
+                [_shape_group, LAYERS.NAME],
+            ):
+                layers.append(layer)
+
+            # Add nickname pinlines if required
+            if self.is_nickname:
+                layers.append(getLayerSet(LAYERS.NICKNAME, _shape_group))
+
+            # Typeline
+            if layer := getLayer(
+                LAYERS.TALL if self.has_extra_textbox else LAYER_NAMES.VERTICAL,
+                [_shape_group, LAYERS.TYPE_LINE],
+            ):
+                layers.append(layer)
+
+            # Textbox
+            if not self.has_extra_textbox and (
+                layer := getLayer(
+                    self.vertical_mode_layer_name, [_shape_group, LAYERS.TEXTBOX]
+                )
+            ):
+                layers.append(layer)
+
+            return layers
+        return super().pinlines_shape
+
+    @cached_property
+    def typeline_pinline_shape(self) -> ArtLayer | None:
+        if self.is_vertical_creature:
+            return getLayer(
+                LAYERS.TALL, (self.pinlines_group, LAYERS.SHAPE, LAYERS.TYPE_LINE)
+            )
+
+    @cached_property
+    def bottom_textbox_shape(self) -> ArtLayer | None:
+        raise ValueError("Bottom textbox shape hasn't been built yet.")
+
+    @cached_property
+    def bottom_textbox_pinlines_shape(self) -> ArtLayer | None:
+        raise ValueError("Bottom textbox pinlines shape hasn't been built yet.")
+
+    @cached_property
+    def vertical_pinlines_shape(self) -> ArtLayer | None:
+        raise ValueError("Vertical pinlines shape hasn't been built yet.")
+
+    # endregion Shapes
 
     # region Text
 
@@ -144,6 +401,10 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         if self.is_vertical_layout:
             return getLayer(LAYERS.TEXT, self.vertical_group)
         return super().text_layer_ability
+
+    @cached_property
+    def text_layer_ability_bottom(self) -> ArtLayer | None:
+        raise ValueError("Bottom ability text layer hasn't been built yet.")
 
     @cached_property
     def text_layer_reminder(self) -> ArtLayer | None:
@@ -173,7 +434,56 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def rules_text_and_pt_layers(self) -> None:
         if self.is_vertical_layout and not self.is_creature:
             return None
+        if self.has_extra_textbox and self.text_layer_ability_bottom:
+            self.text += [
+                FormattedTextArea(
+                    self.text_layer_ability_bottom,
+                    contents=self.layout.ability_text,
+                    centered=True,
+                    reference=self.textbox_bottom_reference,
+                )
+            ]
         return super(SagaMod, self).rules_text_and_pt_layers()
+
+    def textbox_positioning(self) -> None:
+        if (
+            self.has_extra_textbox
+            and (
+                ref_textbox_tall := getLayer(LAYERS.TALL, self.textbox_reference_group)
+            )
+            and self.textbox_bottom_reference
+        ):
+            delta = (
+                get_shape_dimensions(self.textbox_bottom_reference)["top"]
+                - get_shape_dimensions(ref_textbox_tall)["top"]
+            )
+
+            # Shift typeline text
+            if self.text_layer_type:
+                self.text_layer_type.translate(0, delta)
+
+            # Shift typeline pinline
+            if self.typeline_pinline_shape:
+                self.typeline_pinline_shape.translate(0, delta)
+
+            # Shift typeline box
+            if isinstance(self.twins_shape, list):
+                self.twins_shape[1].translate(0, delta)
+
+            # Shift expansion symbol
+            if CFG.symbol_enabled and self.expansion_symbol_layer:
+                self.expansion_symbol_layer.translate(0, delta)
+
+            # Shift indicator
+            if self.is_type_shifted and self.indicator_group:
+                self.indicator_group.parent.translate(0, delta)
+
+            # Some unknown interaction during the hooks execution step
+            # causes the ref_textbox_tall to turn visible, but deselecting
+            # it at this point prevents that from happening.
+            deselect_all_layers()
+        else:
+            super().textbox_positioning()
 
     # endregion Text
 
@@ -246,16 +556,21 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # TODO submit reminder and icon improvements to Proxyshop
     def text_layers_saga(self):
         # Handle reminder text
-        if self.show_vertical_reminder_text:
-            self.text.append(
-                FormattedTextArea(
-                    layer=self.text_layer_reminder,
-                    contents=self.layout.saga_description,
-                    reference=self.reminder_reference,
+        if self.text_layer_reminder:
+            if self.show_vertical_reminder_text or (
+                self.is_vertical_creature and self.layout.saga_description
+            ):
+                self.text.append(
+                    FormattedTextArea(
+                        layer=self.text_layer_reminder,
+                        contents=self.layout.saga_description,
+                        reference=self.reminder_reference,
+                    )
                 )
-            )
-        else:
-            self.text_layer_reminder.visible = False
+                if self.ability_divider_layer:
+                    self.ability_divider_layer.visible = True
+            else:
+                self.text_layer_reminder.visible = False
 
         # Iterate through each saga stage and add line to text layers
         if (icon_ref := getLayerSet(LAYER_NAMES.ICON, self.saga_group)) and (

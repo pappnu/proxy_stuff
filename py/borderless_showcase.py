@@ -33,12 +33,12 @@ from .helpers import (
     ExpansionSymbolOverrideMode,
     FlipDirection,
     copy_color,
-    create_shape_layer,
     flip_layer,
     get_numeric_setting,
     is_color_identity,
     parse_hex_color_list,
 )
+from .utils.path import create_shape_layer
 from .utils.text import align_dimension
 from .uxp.shape import ShapeOperation, merge_shapes
 from .uxp.text import create_text_layer_with_path
@@ -184,7 +184,10 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def textbox_height(self) -> float | int:
-        return max(get_numeric_setting(CFG, "TEXT", "Textbox.Height", 0), 0)
+        if self.is_vertical_creature:
+            # There's no support for an extra textbox for Saga creatures
+            return 0
+        return super().textbox_height
 
     @cached_property
     def rules_text_font_size(self) -> float | int:

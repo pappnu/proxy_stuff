@@ -10,6 +10,18 @@ default = 1
 [TEXT]
 title = "Text Options"
 
+[TEXT."Textbox.Height"]
+title = "Textbox height"
+desc = """The height to use for Saga creatures' bottom textbox in pixels. Values <= 0 omit the textbox.
+For reference, the height options that the normal Borderless template uses are:
+Tall = 1230
+Normal = 1046
+Medium = 866
+Short = 661
+"""
+type = "numeric"
+default = 400.0
+
 [TEXT.Nickname]
 title = "Use Nickname"
 desc = """When enabled, card will be rendered with both a 'real' name and a 'nickname' you can enter manually."""

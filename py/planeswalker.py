@@ -24,10 +24,10 @@ from src.templates import (
 from src.templates.mdfc import VectorMDFCMod
 from src.templates.transform import VectorTransformMod
 
-from .helpers import LAYER_NAMES, create_vector_mask_from_shape, subtract_front_shape
+from .helpers import LAYER_NAMES, create_vector_mask_from_shape
+from .utils.path import subtract_front_shape
 
-sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
-NO_DIALOG = DialogModes.DisplayNoDialogs
+sID = APP.stringIDToTypeID
 
 
 class PlaneswalkerBorderlessVector(
@@ -685,4 +685,4 @@ def apply_vector_mask_to_layer_fx(layer: ArtLayer | LayerSet | None = None) -> N
     desc = ActionDescriptor()
     desc.putReference(sID("target"), ref)
     desc.putObject(sID("to"), sID("layer"), layer_fx)
-    APP.executeAction(sID("set"), desc, NO_DIALOG)
+    APP.executeAction(sID("set"), desc, DialogModes.DisplayNoDialogs)
