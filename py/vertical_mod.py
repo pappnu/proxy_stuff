@@ -7,7 +7,7 @@ from photoshop.api._layerSet import LayerSet
 from src import CFG
 from src.enums.layers import LAYERS
 from src.helpers.colors import rgb_white
-from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
+from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.layouts import SagaLayout
 from src.templates.case import CaseMod
 from src.templates.classes import ClassMod
@@ -16,11 +16,7 @@ from src.templates.saga import SagaMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
-from .helpers import (
-    LAYER_NAMES,
-    deselect_all_layers,
-    get_numeric_setting,
-)
+from .helpers import LAYER_NAMES, get_numeric_setting
 from .utils.path import create_shape_layer, get_shape_dimensions
 from .uxp.shape import ShapeOperation, merge_shapes
 from .uxp.text import create_text_layer_with_path
@@ -478,10 +474,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             if self.is_type_shifted and self.indicator_group:
                 self.indicator_group.parent.translate(0, delta)
 
-            # Some unknown interaction during the hooks execution step
-            # causes the ref_textbox_tall to turn visible, but deselecting
-            # it at this point prevents that from happening.
-            deselect_all_layers()
+            # For some reason, at this point Photoshop is in a state where
+            # even basic actions like removing a layer that is not selected
+            # causes the currently selected layer to become visible, so as a
+            # precaution let's select some layer that should be visible anyway.
+            select_layer(self.art_layer)
         else:
             super().textbox_positioning()
 
