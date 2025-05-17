@@ -30,6 +30,8 @@ class LAYER_NAMES(StrEnum):
     CARD_NAME = "Card Name"
     ICON = "Icon"
     SHADOW = "Shadow"
+    PT_INNER = "PT Box Inner"
+    PT_OUTER = "PT Box Outer"
     PW = "pw"
     PW3 = "pw-3"
     PW4 = "pw-4"

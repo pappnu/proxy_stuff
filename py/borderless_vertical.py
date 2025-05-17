@@ -77,13 +77,29 @@ class BorderlessVertical(VerticalMod):
 
     @cached_property
     def pt_shape(self) -> ArtLayer | None:
-        if self.is_vertical_creature:
+        if self.is_creature:
             return getLayer(
-                LAYERS.PT_BOX
-                + (f" {LAYER_NAMES.VERTICAL}" if not self.has_extra_textbox else ""),
+                LAYER_NAMES.PT_OUTER
+                + (
+                    f" {LAYER_NAMES.VERTICAL}"
+                    if self.is_vertical_creature and not self.has_extra_textbox
+                    else ""
+                ),
                 [self.pt_group, LAYERS.SHAPE],
             )
-        return None
+
+    @cached_property
+    def pt_inner_shape(self) -> ArtLayer | None:
+        if self.is_creature:
+            return getLayer(
+                LAYER_NAMES.PT_INNER
+                + (
+                    f" {LAYER_NAMES.VERTICAL}"
+                    if self.is_vertical_creature and not self.has_extra_textbox
+                    else ""
+                ),
+                [self.pt_group, LAYERS.SHAPE],
+            )
 
     @cached_property
     def bottom_curve_shape(self) -> ArtLayer | None:
@@ -130,9 +146,30 @@ class BorderlessVertical(VerticalMod):
 
     # endregion Masks
 
+    # region Colors
+
+    def enable_frame_layers(self) -> None:
+        super().enable_frame_layers()
+
+        if self.is_creature and self.pt_group:
+            layer: ArtLayer
+            # Remove unwanted group wide color fill
+            for layer in self.pt_group.artLayers:
+                if layer.name.startswith("Color Fill"):
+                    layer.visible = False
+                    break
+
+            # The inner and outer parts of the PT box require different colors
+            if self.pt_shape:
+                self.generate_layer(group=self.pt_shape, colors=self.pinlines_colors)
+            if self.pt_inner_shape:
+                self.generate_layer(group=self.pt_inner_shape, colors=self.twins_colors)
+
+    # endregion Colors
+
     # region Text
 
-    def swap_layer_font_color(
+    def set_layer_font_color(
         self, layer: ArtLayer, color: SolidColor | None = None
     ) -> None:
         color = color or self.RGB_BLACK
@@ -187,7 +224,7 @@ class BorderlessVertical(VerticalMod):
 
     def text_layers_saga(self):
         if self.color_textbox and self.is_authentic_front and self.text_layer_ability:
-            self.swap_layer_font_color(self.text_layer_ability)
+            self.set_layer_font_color(self.text_layer_ability)
 
         if self.is_drop_shadow:
             enable_layer_fx(self.text_layer_ability)
@@ -199,26 +236,26 @@ class BorderlessVertical(VerticalMod):
     # region Transform
 
     def text_layers_transform_front(self) -> None:
-        if self.is_layout_saga:
-            if self.is_authentic_front and self.text_layer_name:
-                self.swap_layer_font_color(self.text_layer_name)
+        if self.is_authentic_front and self.text_layer_name:
+            self.set_layer_font_color(self.text_layer_name)
 
-            if self.is_authentic_front and self.color_typeline and self.text_layer_type:
-                self.swap_layer_font_color(self.text_layer_type)
+        if self.is_authentic_front and self.color_typeline and self.text_layer_type:
+            self.set_layer_font_color(self.text_layer_type)
 
-            if self.color_textbox and self.show_vertical_reminder_text:
-                self.swap_layer_font_color(self.text_layer_reminder)
+        if self.color_textbox and self.show_vertical_reminder_text:
+            self.set_layer_font_color(self.text_layer_reminder)
 
-            if (
-                self.color_textbox
-                and not self.is_authentic_front
-                and self.is_flipside_creature
-                and self.text_layer_flipside_pt
-            ):
-                self.text_layer_flipside_pt.textItem.color = get_rgb(*[186, 186, 186])
+        if self.is_authentic_front and self.text_layer_pt:
+            self.set_layer_font_color(self.text_layer_pt)
 
-            super(BorderlessVectorTemplate, self).text_layers_transform_front()
-        else:
-            super().text_layers_transform_front()
+        if (
+            self.color_textbox
+            and self.is_authentic_front
+            and self.is_flipside_creature
+            and self.text_layer_flipside_pt
+        ):
+            self.text_layer_flipside_pt.textItem.color = get_rgb(45, 45, 45)
+
+        super(BorderlessVectorTemplate, self).text_layers_transform_front()
 
     # endregion Transform
