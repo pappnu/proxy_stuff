@@ -155,7 +155,7 @@ class BorderlessVertical(VerticalMod):
             layer: ArtLayer
             # Remove unwanted group wide color fill
             for layer in self.pt_group.artLayers:
-                if layer.name.startswith("Color Fill"):
+                if " Fill " in layer.name:
                     layer.visible = False
                     break
 
@@ -194,7 +194,7 @@ class BorderlessVertical(VerticalMod):
             and (
                 layer := find_art_layer(
                     self.textbox_group,
-                    lambda layer: layer.name.startswith("Color Fill"),
+                    lambda layer: " Fill " in layer.name,
                 )
             )
         ):
@@ -204,7 +204,7 @@ class BorderlessVertical(VerticalMod):
             and self.twins_group
             and (
                 layer := find_art_layer(
-                    self.twins_group, lambda layer: layer.name.startswith("Color Fill")
+                    self.twins_group, lambda layer: " Fill " in layer.name
                 )
             )
         ):
