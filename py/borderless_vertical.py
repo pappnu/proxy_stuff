@@ -223,6 +223,9 @@ class BorderlessVertical(VerticalMod):
     # region Saga
 
     def text_layers_saga(self):
+        if self.has_extra_textbox:
+            self.show_vertical_reminder_text = False
+
         if self.color_textbox and self.is_authentic_front and self.text_layer_ability:
             self.set_layer_font_color(self.text_layer_ability)
 

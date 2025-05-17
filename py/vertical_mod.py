@@ -555,7 +555,9 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         # Handle reminder text
         if self.text_layer_reminder:
             if self.show_vertical_reminder_text or (
-                self.is_vertical_creature and self.layout.saga_description
+                self.is_vertical_creature
+                and self.layout.saga_description
+                and not self.has_extra_textbox
             ):
                 self.text.append(
                     FormattedTextArea(
