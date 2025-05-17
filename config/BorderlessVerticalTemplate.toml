@@ -1,6 +1,19 @@
 [FRAME]
 title = "Frame Options"
 
+[FRAME."Textbox.Size"]
+title = "Textbox Size"
+desc = """Governs the height of the textbox. Automatic will use a size proportional to the number of lines in card text."""
+type = "options"
+default = "Automatic"
+options = ["Tall", "Normal", "Medium", "Short", "Automatic"]
+
+[FRAME.Textless]
+title = "Render Textless"
+desc = """When enabled, card will be rendered with only a name and type box and no textbox or other text elements."""
+type = "bool"
+default = 0
+
 [FRAME."Crown.Texture"]
 title = "Legendary Crown Textured"
 desc = """When disabled, removes textures from Legendary Crown to give it a more minimalist look."""
@@ -60,7 +73,7 @@ default = 1
 title = "Authentic Front Face Colors"
 desc = """When enabled, front face MDFC and Transform cards will have authentic lighter colors."""
 type = "bool"
-default = 1
+default = 0
 
 [COLORS."Land.Colorshift"]
 title = "Darker Land Colors"

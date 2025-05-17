@@ -41,12 +41,18 @@ borderless-showcase.psd:
         - battle
 
 borderless-vertical.psd:
-  name: 'Borderless Vertical'
+  name: 'Borderless Enhanced'
   id: '1OZXZq3xPdfSsypmIXcKiBHupZK-ssGtw'
-  desc: 'The Borderless template adjusted for Class and Saga cards.'
+  desc: 'The Borderless template adjusted to mimick the newer official borderless style and to support a wider variety of card types.'
   templates:
-    Borderless:
+    Borderless Enhanced:
       BorderlessVerticalTemplate:
+        - normal
+        - transform_front
+        - transform_back
+        - mdfc_front
+        - mdfc_back
+        - mutate
         - case
         - class
         - saga

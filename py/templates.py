@@ -37,7 +37,7 @@ class BorderlessShowcaseTemplate(BorderlessShowcase):
 
 
 class BorderlessVerticalTemplate(BorderlessVertical):
-    template_suffix = "Borderless"
+    template_suffix = "Borderless Enhanced"
 
     def load_artwork(
         self,
