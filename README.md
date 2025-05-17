@@ -24,7 +24,7 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
     ├── Proxyshop.exe
     └── ...
     ```
-2. Download the templates via Proxyshop's updater.
+2. Download the templates via Proxyshop's updater or manually from [here](https://drive.google.com/drive/folders/1Q4JgzLOWCocjh56MKTfHgSPGMS-QQtOL).
 
 ## Troubleshooting
 
