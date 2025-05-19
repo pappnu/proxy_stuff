@@ -392,7 +392,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     # endregion Shapes
 
-    # region Colors Maps
+    # region Color Maps
 
     crown_color_map = {
         **BorderlessVectorTemplate.crown_color_map,
@@ -408,6 +408,12 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             gold = "#9e822f"
         else:
             gold = "#94762f"
+        if self.is_land and self.is_colorless:
+            land = "#8f8c88"
+        elif self.land_colorshift:
+            land = "#684e30"
+        else:
+            land = "#a79c8e"
         return {
             "W": "#878377",
             "U": "#0075be",
@@ -415,7 +421,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             "R": "#b82e1c",
             "G": "#1f593f",
             "Gold": gold,
-            "Land": "#8f8c88" if self.land_colorshift else "#a79c8e",
+            "Land": land,
             "Hybrid": "#a79c8e",
             "Artifact": "#4f6b7d",
             "Colorless": "#74726b",
