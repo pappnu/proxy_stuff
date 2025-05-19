@@ -6,9 +6,11 @@ from photoshop.api._layerSet import LayerSet
 
 from src import CFG
 from src.enums.layers import LAYERS
-from src.helpers.colors import rgb_white
+from src.enums.settings import BorderlessColorMode
+from src.helpers.colors import GradientConfig, get_pinline_gradient, rgb_white
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.layouts import SagaLayout
+from src.schema.colors import ColorObject
 from src.templates.case import CaseMod
 from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
@@ -389,6 +391,112 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         raise ValueError("Vertical pinlines shape hasn't been built yet.")
 
     # endregion Shapes
+
+    # region Colors Maps
+
+    crown_color_map = {
+        **BorderlessVectorTemplate.crown_color_map,
+        "U": "#116cad",
+        "Artifact": "#a3b6bf",
+    }
+
+    @cached_property
+    def dark_color_map(self) -> dict[str, ColorObject]:
+        if self.is_creature:
+            gold = "#9e7939"
+        elif self.is_land:
+            gold = "#9e822f"
+        else:
+            gold = "#94762f"
+        return {
+            "W": "#878377",
+            "U": "#0075be",
+            "B": "#282523",
+            "R": "#b82e1c",
+            "G": "#1f593f",
+            "Gold": gold,
+            "Land": "#8f8c88" if self.land_colorshift else "#a79c8e",
+            "Hybrid": "#a79c8e",
+            "Artifact": "#4f6b7d",
+            "Colorless": "#74726b",
+            "Vehicle": "#4c3314",
+        }
+
+    @cached_property
+    def pinlines_color_map(self) -> dict[str, ColorObject]:
+        return {
+            "W": "#f6f6ef",
+            "U": "#0075be",
+            "B": "#383630",
+            "R": "#ef3827",
+            "G": "#0b7446",
+            "Gold": "#e9c748",
+            "Land": "#a59385",
+            "Artifact": "#8a9fad",
+            "Colorless": "#e6ecf2",
+            "Vehicle": "#4d2d05",
+        }
+
+    @cached_property
+    def pt_box_inner_color_map(self) -> dict[str, ColorObject]:
+        return {
+            **self.dark_color_map,
+            "W": "#8f8071",
+            "U": "#1e5576",
+            "B": "#3c342c",
+            "R": "#972122",
+            "G": "#185231",
+            "Gold": "#87693f",
+            "Artifact": "#365d6b",
+        }
+
+    # endregion Color Maps
+
+    # region Colors
+
+    @cached_property
+    def pt_inner_colors(self) -> ColorObject | list[ColorObject] | list[GradientConfig]:
+        """
+        Colors for inner part of PT box.
+        Follows the rules of pt_colors, but uses a different color_map.
+        """
+
+        # Default to twins, or Vehicle for non-colored vehicle artifacts
+        colors = self.twins
+
+        # Color enabled hybrid OR color enabled multicolor
+        if (self.is_hybrid and self.hybrid_colored) or (
+            self.is_multicolor and self.multicolor_pt
+        ):
+            colors = self.identity[-1]
+        # Use Hybrid color for color-disabled hybrid cards
+        elif self.is_hybrid:
+            colors = LAYERS.HYBRID
+
+        # Use artifact twins color if artifact mode isn't colored
+        if (
+            self.is_artifact
+            and not self.is_land
+            and self.artifact_color_mode
+            not in [
+                BorderlessColorMode.Twins_And_PT,
+                BorderlessColorMode.All,
+                BorderlessColorMode.PT,
+            ]
+        ):
+            colors = LAYERS.ARTIFACT
+
+        # Use Vehicle for non-colored artifacts
+        if colors == LAYERS.ARTIFACT and self.is_vehicle:
+            colors = LAYERS.VEHICLE
+
+        # Return Solid Color or Gradient notation
+        return get_pinline_gradient(
+            colors=colors,
+            color_map=self.pt_box_inner_color_map,
+        )
+
+    # endregion Colors
 
     # region Text
 
