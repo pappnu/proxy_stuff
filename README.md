@@ -46,6 +46,12 @@ Transpile scripts
 npm run build
 ```
 
+## Credits
+
+Thanks to all to those that have helped in various ways with the development of this plugin:
+- Kapa the Bard, creator of Polymath Proxy
+- [Alex Taxiera](https://github.com/alex-taxiera)
+
 ## Licence
 
 MIT
