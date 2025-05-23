@@ -19,6 +19,8 @@ from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
 from .helpers import LAYER_NAMES, get_numeric_setting
+from .utils.layer_fx import get_stroke_details
+from .utils.mask import create_mask_from
 from .utils.path import create_shape_layer, get_shape_dimensions
 from .uxp.shape import ShapeOperation, merge_shapes
 from .uxp.text import create_text_layer_with_path
@@ -112,16 +114,33 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     def create_shapes_for_vertical_creature(self) -> None:
         if ref_textbox := getLayer(LAYERS.TALL, (self.textbox_group, LAYERS.SHAPE)):
+            pinlines_stroke = (
+                get_stroke_details(self.pinlines_group) if self.pinlines_group else None
+            )
+            pinlines_stroke_size = pinlines_stroke["size"] if pinlines_stroke else 0
             ref_textbox_dims = get_shape_dimensions(ref_textbox)
-            textbox_top = ref_textbox_dims["bottom"] - self.textbox_height
+            textbox_bottom = ref_textbox_dims["bottom"] - pinlines_stroke_size
+            textbox_top = textbox_bottom - self.textbox_height
 
             # Build bottom textbox
             self.bottom_textbox_shape = create_shape_layer(
                 (
-                    {"x": ref_textbox_dims["left"], "y": textbox_top},
-                    {"x": ref_textbox_dims["right"], "y": textbox_top},
-                    {"x": ref_textbox_dims["right"], "y": ref_textbox_dims["bottom"]},
-                    {"x": ref_textbox_dims["left"], "y": ref_textbox_dims["bottom"]},
+                    {
+                        "x": ref_textbox_dims["left"] + pinlines_stroke_size,
+                        "y": textbox_top,
+                    },
+                    {
+                        "x": ref_textbox_dims["right"] - pinlines_stroke_size,
+                        "y": textbox_top,
+                    },
+                    {
+                        "x": ref_textbox_dims["right"] - pinlines_stroke_size,
+                        "y": textbox_bottom,
+                    },
+                    {
+                        "x": ref_textbox_dims["left"] + pinlines_stroke_size,
+                        "y": textbox_bottom,
+                    },
                 ),
                 relative_layer=ref_textbox,
                 placement=ElementPlacement.PlaceAfter,
@@ -153,6 +172,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 pinlines_top = (
                     ref_textbox_pinlines_dims["bottom"]
                     - self.textbox_height
+                    - 2 * pinlines_stroke_size
                     - (ref_textbox_pinlines_dims["height"] - ref_textbox_dims["height"])
                 )
 
@@ -559,13 +579,15 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         if (
             self.has_extra_textbox
             and (
-                ref_textbox_tall := getLayer(LAYERS.TALL, self.textbox_reference_group)
+                ref_textbox_pinlines := getLayer(
+                    LAYERS.TALL, (self.pinlines_group, LAYERS.SHAPE, LAYERS.TEXTBOX)
+                )
             )
-            and self.textbox_bottom_reference
+            and self.bottom_textbox_pinlines_shape
         ):
             delta = (
-                get_shape_dimensions(self.textbox_bottom_reference)["top"]
-                - get_shape_dimensions(ref_textbox_tall)["top"]
+                get_shape_dimensions(self.bottom_textbox_pinlines_shape)["top"]
+                - get_shape_dimensions(ref_textbox_pinlines)["top"]
             )
 
             # Shift typeline text
@@ -577,8 +599,20 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 self.typeline_pinline_shape.translate(0, delta)
 
             # Shift typeline box
-            if isinstance(self.twins_shape, list):
-                self.twins_shape[1].translate(0, delta)
+            if isinstance(self.twins_shape, list) and isinstance(
+                (typeline_box := self.twins_shape[1]), ArtLayer
+            ):
+                typeline_box.translate(0, delta)
+
+                # Create mask for pinlines
+                if (
+                    isinstance((name_box := self.twins_shape[0]), ArtLayer)
+                    and self.bottom_textbox_shape
+                ):
+                    create_mask_from(
+                        self.pinlines_group,
+                        (name_box, typeline_box, self.bottom_textbox_shape),
+                    )
 
             # Shift expansion symbol
             if CFG.symbol_enabled and self.expansion_symbol_layer:
