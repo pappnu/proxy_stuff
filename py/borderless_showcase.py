@@ -17,10 +17,11 @@ from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.position import check_reference_overlap
 from src.helpers.text import get_font_size, get_line_count, set_text_size_and_leading
-from src.layouts import AdventureLayout, BattleLayout, PlaneswalkerLayout
+from src.layouts import AdventureLayout, BattleLayout, LevelerLayout, PlaneswalkerLayout
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
 from src.schema.colors import ColorObject, GradientColor
 from src.templates.adventure import AdventureMod
+from src.templates.leveler import LevelerMod
 from src.templates.planeswalker import PlaneswalkerMod
 from src.templates.saga import SagaMod
 from src.templates.transform import TransformMod
@@ -33,6 +34,7 @@ from .helpers import (
     ExpansionSymbolOverrideMode,
     FlipDirection,
     copy_color,
+    create_clipping_mask,
     flip_layer,
     get_numeric_setting,
     is_color_identity,
@@ -45,7 +47,9 @@ from .uxp.text import create_text_layer_with_path
 from .vertical_mod import VerticalMod
 
 
-class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRestore):
+class BorderlessShowcase(
+    VerticalMod, PlaneswalkerMod, AdventureMod, LevelerMod, BackupAndRestore
+):
     # region Constants
 
     @cached_property
@@ -197,6 +201,10 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
     def rules_text_padding(self) -> float | int:
         return get_numeric_setting(CFG, "TEXT", "Rules.Text.Padding", 64)
 
+    @cached_property
+    def drop_shadow_enabled(self) -> bool:
+        return False
+
     # endregion settings
 
     # region Checks
@@ -218,6 +226,10 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         return isinstance(self.layout, PlaneswalkerLayout)
 
     @cached_property
+    def is_leveler(self) -> bool:
+        return isinstance(self.layout, LevelerLayout)
+
+    @cached_property
     def is_pt_enabled(self) -> bool:
         return self.is_creature
 
@@ -231,7 +243,11 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def supports_dynamic_textbox_height(self) -> bool:
-        return not self.is_vertical_layout and not self.is_planeswalker
+        return (
+            not self.is_vertical_layout
+            and not self.is_planeswalker
+            and not self.is_leveler
+        )
 
     # endregion Checks
 
@@ -245,6 +261,9 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def size(self) -> str:
+        if self.is_leveler:
+            return BorderlessTextbox.Tall
+
         if self.supports_dynamic_textbox_height and (
             self.textbox_height or self.rules_text_font_size
         ):
@@ -500,6 +519,11 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
+        if self.is_leveler:
+            return get_reference_layer(
+                f"{LAYERS.TEXTBOX_REFERENCE} - Level Text", self.leveler_group
+            )
+
         ref: ArtLayer | None = None
 
         if self.is_planeswalker:
@@ -655,7 +679,7 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def pt_box_shape(self) -> list[ArtLayer | None]:
-        if not self.is_pt_enabled:
+        if not self.is_pt_enabled or self.is_leveler:
             return [None]
 
         if self.bottom_border_type == "Full":
@@ -696,7 +720,7 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def bottom_pinline_shape(self) -> ArtLayer | None:
-        if self.is_pt_enabled:
+        if self.is_pt_enabled and not self.is_leveler:
             return None
         return getLayer(
             "Partial"
@@ -845,6 +869,8 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
         methods = super().frame_layer_methods
         if self.is_adventure:
             methods.append(self.enable_adventure_layers)
+        if self.is_leveler:
+            methods.append(self.frame_layers_leveler)
         return methods
 
     # endregion Frame
@@ -903,6 +929,9 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
 
     @cached_property
     def text_layer_rules(self) -> ArtLayer | None:
+        if self.is_leveler:
+            return getLayer("Rules Text - Level Up", self.leveler_group)
+
         if self.is_planeswalker:
             return None
 
@@ -1404,6 +1433,23 @@ class BorderlessShowcase(VerticalMod, PlaneswalkerMod, AdventureMod, BackupAndRe
                         text_area.execute()
 
     # endregion Adventure
+
+    # region Leveler
+
+    def frame_layers_leveler(self) -> None:
+        if self.leveler_group:
+            self.leveler_group.visible = True
+        if group := getLayerSet("Leveler Boxes"):
+            if (pinlines := getLayerSet(LAYERS.PINLINES, group)) and (
+                layer := self.generate_layer(
+                    group=pinlines, colors=self.pinlines_colors, clipped=False
+                )
+            ):
+                layer.move(pinlines, ElementPlacement.PlaceBefore)
+                create_clipping_mask(layer)
+            group.visible = True
+
+    # endregion Leveler
 
     # region Vertical Right
 

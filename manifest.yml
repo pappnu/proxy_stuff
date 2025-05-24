@@ -28,6 +28,7 @@ borderless-showcase.psd:
         - transform_back
         - mdfc_front
         - mdfc_back
+        - leveler
         - mutate
         - planeswalker
         - pw_tf_front
