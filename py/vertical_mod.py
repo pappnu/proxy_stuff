@@ -9,7 +9,8 @@ from src.enums.layers import LAYERS
 from src.enums.settings import BorderlessColorMode
 from src.helpers.colors import GradientConfig, get_pinline_gradient, rgb_white
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
-from src.layouts import SagaLayout
+from src.helpers.masks import apply_mask_to_layer_fx, enable_vector_mask
+from src.layouts import ClassLayout, SagaLayout
 from src.schema.colors import ColorObject
 from src.templates.case import CaseMod
 from src.templates.classes import ClassMod
@@ -95,7 +96,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def process_layout_data(self) -> None:
         super().process_layout_data()
 
-        if self.is_vertical_creature and not self.textbox_height:
+        if (
+            isinstance(self.layout, SagaLayout)
+            and self.is_vertical_creature
+            and not self.textbox_height
+        ):
             self.layout.saga_description = (
                 f"{self.layout.ability_text}\n{self.layout.saga_description}"
             )
@@ -273,6 +278,10 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # region Groups
 
     @cached_property
+    def legendary_crown_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.LEGENDARY_CROWN)
+
+    @cached_property
     def references_group(self) -> LayerSet | None:
         return getLayerSet(LAYER_NAMES.REFERENCES)
 
@@ -328,8 +337,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                     if not self.is_case_layout
                     and (
                         self.show_vertical_reminder_text
-                        or self.is_vertical_creature
-                        and self.layout.saga_description
+                        or (
+                            self.is_vertical_creature
+                            and isinstance(self.layout, SagaLayout)
+                            and self.layout.saga_description
+                        )
                     )
                     else " Full"
                 )
@@ -350,6 +362,14 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         return ReferenceLayer(self.bottom_textbox_shape)
 
     # endregion Reference layers
+
+    # region Raster layers
+
+    @cached_property
+    def nyx_crown_background(self) -> ArtLayer | None:
+        return getLayer(self.background, LAYERS.NYX)
+
+    # endregion Raster layers
 
     # region Shapes
 
@@ -564,7 +584,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def rules_text_and_pt_layers(self) -> None:
         if self.is_vertical_layout and not self.is_creature:
             return None
-        if self.has_extra_textbox and self.text_layer_ability_bottom:
+        if (
+            self.has_extra_textbox
+            and self.text_layer_ability_bottom
+            and isinstance(self.layout, SagaLayout)
+        ):
             self.text += [
                 FormattedTextArea(
                     self.text_layer_ability_bottom,
@@ -608,11 +632,17 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 if (
                     isinstance((name_box := self.twins_shape[0]), ArtLayer)
                     and self.bottom_textbox_shape
+                    and self.pinlines_group
                 ):
+                    apply_to: list[LayerSet] = [self.pinlines_group]
+                    if self.is_legendary and self.legendary_crown_group:
+                        apply_to.append(self.legendary_crown_group)
                     create_mask_from(
-                        self.pinlines_group,
+                        apply_to,
                         (name_box, typeline_box, self.bottom_textbox_shape),
                     )
+                    for layer in apply_to:
+                        apply_mask_to_layer_fx(layer)
 
             # Shift expansion symbol
             if CFG.symbol_enabled and self.expansion_symbol_layer:
@@ -656,39 +686,40 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     # TODO find out a way to set the cost colon as white that doesn't involve lots of copy paste
     def text_layers_classes(self) -> None:
-        # Add first static line
-        self.line_layers.append(self.text_layer_ability)
-        self.text.append(
-            FormattedTextField(
-                layer=self.text_layer_ability,
-                contents=self.layout.class_lines[0]["text"],
+        if isinstance(self.layout, ClassLayout):
+            # Add first static line
+            self.line_layers.append(self.text_layer_ability)
+            self.text.append(
+                FormattedTextField(
+                    layer=self.text_layer_ability,
+                    contents=self.layout.class_lines[0]["text"],
+                )
             )
-        )
 
-        # Add text fields for each line and class stage
-        for i, line in enumerate(self.layout.class_lines[1:]):
-            # Create a new ability line
-            line_layer = self.text_layer_ability.duplicate()
-            self.line_layers.append(line_layer)
+            # Add text fields for each line and class stage
+            for i, line in enumerate(self.layout.class_lines[1:]):
+                # Create a new ability line
+                line_layer = self.text_layer_ability.duplicate()
+                self.line_layers.append(line_layer)
 
-            # Use existing stage divider or create new one
-            stage = self.stage_group if i == 0 else self.stage_group.duplicate()
-            cost, level = [*stage.artLayers][:2]
-            self.stage_layers.append(stage)
+                # Use existing stage divider or create new one
+                stage = self.stage_group if i == 0 else self.stage_group.duplicate()
+                cost, level = [*stage.artLayers][:2]
+                self.stage_layers.append(stage)
 
-            # Add text layers to be formatted
-            self.text.extend(
-                [
-                    FormattedTextField(layer=line_layer, contents=line["text"]),
-                    FormattedTextField(
-                        layer=cost,
-                        contents=f"{line['cost']}:",
-                        # the whole function had to be overridden to set this color kwarg
-                        color=rgb_white(),
-                    ),
-                    TextField(layer=level, contents=f"Level {line['level']}"),
-                ]
-            )
+                # Add text layers to be formatted
+                self.text.extend(
+                    [
+                        FormattedTextField(layer=line_layer, contents=line["text"]),
+                        FormattedTextField(
+                            layer=cost,
+                            contents=f"{line['cost']}:",
+                            # the whole function had to be overridden to set this color kwarg
+                            color=rgb_white(),
+                        ),
+                        TextField(layer=level, contents=f"Level {line['level']}"),
+                    ]
+                )
 
     # endregion Class
 
@@ -698,47 +729,59 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         if self.saga_group:
             self.saga_group.visible = True
 
+        if (
+            self.is_nyx
+            and self.is_legendary
+            and self.legendary_crown_group
+            and self.nyx_crown_background
+        ):
+            enable_vector_mask(self.legendary_crown_group)
+            self.nyx_crown_background.visible = True
+
     # TODO submit reminder and icon improvements to Proxyshop
     def text_layers_saga(self):
-        # Handle reminder text
-        if self.text_layer_reminder:
-            if self.show_vertical_reminder_text or (
-                self.is_vertical_creature
-                and self.layout.saga_description
-                and not self.has_extra_textbox
-            ):
-                self.text.append(
-                    FormattedTextArea(
-                        layer=self.text_layer_reminder,
-                        contents=self.layout.saga_description,
-                        reference=self.reminder_reference,
+        if isinstance(self.layout, SagaLayout):
+            # Handle reminder text
+            if self.text_layer_reminder:
+                if self.show_vertical_reminder_text or (
+                    self.is_vertical_creature
+                    and self.layout.saga_description
+                    and not self.has_extra_textbox
+                ):
+                    self.text.append(
+                        FormattedTextArea(
+                            layer=self.text_layer_reminder,
+                            contents=self.layout.saga_description,
+                            reference=self.reminder_reference,
+                        )
                     )
-                )
-                if self.ability_divider_layer:
-                    self.ability_divider_layer.visible = True
-            else:
-                self.text_layer_reminder.visible = False
+                    if self.ability_divider_layer:
+                        self.ability_divider_layer.visible = True
+                else:
+                    self.text_layer_reminder.visible = False
 
-        # Iterate through each saga stage and add line to text layers
-        if (icon_ref := getLayerSet(LAYER_NAMES.ICON, self.saga_group)) and (
-            text_ref := getLayer(LAYERS.TEXT, [icon_ref])
-        ):
-            for i, line in enumerate(self.layout.saga_lines):
-                # Generate icon layers for this ability
-                icons: list[LayerSet] = []
-                for n in line["icons"]:
-                    text_ref.textItem.contents = n
-                    duplicate = icon_ref.duplicate()
-                    icons.append(duplicate)
-                self.icon_layers.append(icons)
+            # Iterate through each saga stage and add line to text layers
+            if (icon_ref := getLayerSet(LAYER_NAMES.ICON, self.saga_group)) and (
+                text_ref := getLayer(LAYERS.TEXT, [icon_ref])
+            ):
+                for i, line in enumerate(self.layout.saga_lines):
+                    # Generate icon layers for this ability
+                    icons: list[LayerSet] = []
+                    for n in line["icons"]:
+                        text_ref.textItem.contents = n
+                        duplicate = icon_ref.duplicate()
+                        icons.append(duplicate)
+                    self.icon_layers.append(icons)
 
-                # Add ability text for this ability
-                layer = (
-                    self.text_layer_ability
-                    if i == 0
-                    else self.text_layer_ability.duplicate()
-                )
-                self.ability_layers.append(layer)
-                self.text.append(FormattedTextField(layer=layer, contents=line["text"]))
+                    # Add ability text for this ability
+                    layer = (
+                        self.text_layer_ability
+                        if i == 0
+                        else self.text_layer_ability.duplicate()
+                    )
+                    self.ability_layers.append(layer)
+                    self.text.append(
+                        FormattedTextField(layer=layer, contents=line["text"])
+                    )
 
     # endregion Saga

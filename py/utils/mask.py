@@ -36,7 +36,7 @@ def copy_to_mask(
     enter_rgb_channel()
 
 
-def create_mask_from(apply_to: ArtLayer | LayerSet, layers: Iterable[ArtLayer]) -> None:
+def create_mask_from(apply_to: Iterable[ArtLayer | LayerSet], layers: Iterable[ArtLayer]) -> None:
     background = create_color_layer(rgb_white(), clipped=False)
     layers_to_merge: list[ArtLayer] = [background]
     for layer in layers:
@@ -45,5 +45,6 @@ def create_mask_from(apply_to: ArtLayer | LayerSet, layers: Iterable[ArtLayer]) 
         layers_to_merge.append(duplicate)
     merged = merge_layers(layers_to_merge)
     merged.rasterize(RasterizeType.EntireLayer)
-    copy_to_mask(apply_to, merged)
+    for layer in apply_to:
+        copy_to_mask(layer, merged)
     merged.remove()

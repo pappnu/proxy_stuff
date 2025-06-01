@@ -144,6 +144,12 @@ class BorderlessVertical(VerticalMod):
             return None
         return super().pinlines_mask
 
+    @cached_property
+    def crown_mask(self) -> dict[str, Any] | None:
+        if self.is_vertical_creature and self.is_transform:
+            return None
+        return super().crown_mask
+
     # endregion Masks
 
     # region Colors
