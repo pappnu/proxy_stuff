@@ -361,6 +361,14 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def textbox_bottom_reference(self) -> ReferenceLayer | None:
         return ReferenceLayer(self.bottom_textbox_shape)
 
+    @cached_property
+    def type_reference(self) -> ArtLayer | None:
+        if not CFG.symbol_enabled:
+            return getLayer(
+                f"{LAYERS.TYPE_LINE} {LAYER_NAMES.OVERFLOW_REFERENCE}", self.text_group
+            )
+        return super().type_reference
+
     # endregion Reference layers
 
     # region Raster layers
