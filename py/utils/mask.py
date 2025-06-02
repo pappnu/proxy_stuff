@@ -37,7 +37,7 @@ def copy_to_mask(
 
 
 def create_mask_from(apply_to: Iterable[ArtLayer | LayerSet], layers: Iterable[ArtLayer]) -> None:
-    background = create_color_layer(rgb_white(), clipped=False)
+    background = create_color_layer(rgb_white(), None, clipped=False)
     layers_to_merge: list[ArtLayer] = [background]
     for layer in layers:
         duplicate = layer.duplicate(background, ElementPlacement.PlaceBefore)
