@@ -1,12 +1,12 @@
 PLUGIN:
-  name: 'Proxy stuff'
-  source: 'https://github.com/pappnu/proxy_stuff'
-  license: 'MIT'
+  name: "Proxy stuff"
+  source: "https://github.com/pappnu/proxy_stuff"
+  license: "MIT"
 
 pw-borderless-vector.psd:
-  name: 'Planeswalker Borderless Vector'
-  id: '1M39vBzfBdd0_7qGiiuztMVSQqOgyS3QG'
-  desc: 'Vectorized version of the Planeswalker Extended template.'
+  name: "Planeswalker Borderless Vector"
+  id: "1M39vBzfBdd0_7qGiiuztMVSQqOgyS3QG"
+  desc: "Vector based borderless Planeswalker template."
   templates:
     Borderless Vector:
       PlaneswalkerBorderlessTemplate:
@@ -17,9 +17,9 @@ pw-borderless-vector.psd:
         - pw_mdfc_back
 
 borderless-showcase.psd:
-  name: 'Borderless Showcase'
-  id: '1An_qmJIrg8o7lyrhA0NhV6MGe0IA5Cma'
-  desc: 'Borderless template in the vein of the official Japan Showcase cards.'
+  name: "Borderless Showcase"
+  id: "1An_qmJIrg8o7lyrhA0NhV6MGe0IA5Cma"
+  desc: "Borderless template in the vein of the official Japan Showcase cards."
   templates:
     Borderless Showcase:
       BorderlessShowcaseTemplate:
@@ -41,10 +41,19 @@ borderless-showcase.psd:
         - class
         - battle
 
+borderless-showcase-split.psd:
+  name: "Borderless Showcase"
+  id: "1-VADjRuMwiuLsPHja5_xNz4L5moHXKtx"
+  desc: "Borderless Split template in the vein of the official Japan Showcase cards."
+  templates:
+    Borderless Showcase:
+      BorderlessShowcaseTemplate:
+        - split
+
 borderless-vertical.psd:
-  name: 'Borderless Enhanced'
-  id: '1OZXZq3xPdfSsypmIXcKiBHupZK-ssGtw'
-  desc: 'The Borderless template adjusted to mimick the newer official borderless style and to support a wider variety of card types.'
+  name: "Borderless Enhanced"
+  id: "1OZXZq3xPdfSsypmIXcKiBHupZK-ssGtw"
+  desc: "Borderless template that mimicks the official borderless style introduced in Wilds of Eldraine (2023)."
   templates:
     Borderless Enhanced:
       BorderlessVerticalTemplate:

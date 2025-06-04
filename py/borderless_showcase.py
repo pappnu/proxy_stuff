@@ -1,6 +1,6 @@
 from functools import cached_property
 from math import ceil
-from typing import Any, Callable, Iterable, Literal, Sequence
+from typing import Any, Callable, Iterable, Literal, NotRequired, Sequence, TypedDict
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -8,22 +8,31 @@ from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
 from src import APP, CFG
+from src.cards import strip_reminder_text
 from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
 from src.enums.settings import BorderlessTextbox
-from src.helpers.bounds import get_layer_dimensions
+from src.helpers.bounds import LayerDimensions, get_layer_dimensions
 from src.helpers.colors import get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
-from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
+from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.helpers.position import check_reference_overlap
 from src.helpers.text import get_font_size, get_line_count, set_text_size_and_leading
-from src.layouts import AdventureLayout, BattleLayout, LevelerLayout, PlaneswalkerLayout
+from src.layouts import (
+    AdventureLayout,
+    BattleLayout,
+    LevelerLayout,
+    MutateLayout,
+    PlaneswalkerLayout,
+    SplitLayout,
+)
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
 from src.schema.colors import ColorObject, GradientColor
 from src.templates.adventure import AdventureMod
 from src.templates.leveler import LevelerMod
 from src.templates.planeswalker import PlaneswalkerMod
 from src.templates.saga import SagaMod
+from src.templates.split import SplitMod
 from src.templates.transform import TransformMod
 from src.text_layers import FormattedTextArea, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
@@ -47,10 +56,34 @@ from .uxp.text import create_text_layer_with_path
 from .vertical_mod import VerticalMod
 
 
+class TextboxSizingArgs(TypedDict):
+    base_text_layer: ArtLayer
+    base_textbox_reference: ReferenceLayer
+    base_text_wrap_reference: ReferenceLayer
+    divider_layer: ArtLayer | None
+    oracle_text: str
+    flavor_text: str | None
+    min_top: NotRequired[float | int | None]
+    height_padding: NotRequired[float | int | None]
+
+
 class BorderlessShowcase(
-    VerticalMod, PlaneswalkerMod, AdventureMod, LevelerMod, BackupAndRestore
+    SplitMod, VerticalMod, PlaneswalkerMod, AdventureMod, LevelerMod, BackupAndRestore
 ):
     # region Constants
+
+    @cached_property
+    def gradient_location_map(self) -> dict[int, list[float | int]]:
+        return (
+            {
+                2: [0.48, 0.52],
+                3: [0.25, 0.30, 0.70, 0.75],
+                4: [0.25, 0.30, 0.48, 0.52, 0.70, 0.75],
+                5: [0.20, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.80],
+            }
+            if self.is_split
+            else VerticalMod.gradient_location_map
+        )
 
     @cached_property
     def predefined_textbox_heights(self) -> dict[str, int]:
@@ -63,7 +96,7 @@ class BorderlessShowcase(
 
     # region Constants
 
-    # region settings
+    # region Settings
 
     @cached_property
     def color_limit(self) -> int:
@@ -205,7 +238,7 @@ class BorderlessShowcase(
     def drop_shadow_enabled(self) -> bool:
         return False
 
-    # endregion settings
+    # endregion Settings
 
     # region Checks
 
@@ -253,7 +286,7 @@ class BorderlessShowcase(
 
     # region Frame Details
 
-    @property
+    @cached_property
     def art_frame_vertical(self) -> str:
         if self.bottom_border_type == "Full":
             return "Full Art Frame Alt"
@@ -269,8 +302,11 @@ class BorderlessShowcase(
         ):
             # Return something else than Tall to trigger textbox_positioning
             return BorderlessTextbox.Automatic
+        elif self.is_split:
+            # Disables textbox_positioning
+            return BorderlessTextbox.Tall
 
-        if self.is_adventure:
+        if isinstance(self.layout, AdventureLayout):
             # Get the user's preferred setting
             size = str(
                 CFG.get_option(
@@ -333,7 +369,7 @@ class BorderlessShowcase(
                 # Final size is the biggest required
                 size = size_map[max(size_left, size_right)]
             return size
-        if self.is_planeswalker:
+        if isinstance(self.layout, PlaneswalkerLayout):
             if self.layout.pw_size > 3:
                 return LAYER_NAMES.PW4
             return LAYER_NAMES.PW3
@@ -350,7 +386,16 @@ class BorderlessShowcase(
     def process_layout_data(self) -> None:
         if self.is_vertical_creature:
             CFG.symbol_enabled = False
-        return super().process_layout_data()
+
+        super().process_layout_data()
+
+        if isinstance(self.layout, MutateLayout):
+            # Render mutate text like any other rules text
+            self.layout.oracle_text = (
+                strip_reminder_text(self.layout.mutate_text)
+                if CFG.remove_reminder
+                else self.layout.mutate_text
+            ) + f"\n{self.layout.oracle_text}"
 
     def override_set_symbol(self) -> None:
         if self.expansion_symbol_color_override is not ExpansionSymbolOverrideMode.Off:
@@ -358,7 +403,7 @@ class BorderlessShowcase(
             # a white symbol with black lines, which is easy to tint with other colors
             self.layout.rarity_letter = Rarity.C[0].upper()
 
-    @property
+    @cached_property
     def pre_render_methods(self) -> list[Callable[[], None]]:
         return [*super().pre_render_methods, self.override_set_symbol]
 
@@ -515,6 +560,11 @@ class BorderlessShowcase(
             dims_ref = get_layer_dimensions(ref)
             ref.translate(0, dims_mdfc["top"] - dims_ref["top"])
             ref.visible = False
+        elif self.is_fuse and ref and self.fuse_reference:
+            dims_fuse = self.fuse_reference.dims
+            dims_ref = get_layer_dimensions(ref)
+            ref.translate(0, dims_fuse["top"] - dims_ref["top"])
+            ref.visible = False
         return ReferenceLayer(ref)
 
     @cached_property
@@ -538,63 +588,52 @@ class BorderlessShowcase(
             and self.textbox_reference_base
             and self.text_wrap_reference_base
         ):
-            # Adjust textbox to fit rules text of fixed font size
-            if right_adjustment := self.adjust_textbox_for_font_size(
-                self.text_layer_rules_base,
-                self.textbox_reference_base,
-                self.text_wrap_reference_base,
-                divider_layer=self.divider_layer,
-                oracle_text=self.layout.oracle_text,
-                flavor_text=self.layout.flavor_text,
+            textboxes_to_adjust: list[TextboxSizingArgs] = [
+                {
+                    "base_text_layer": self.text_layer_rules_base,
+                    "base_textbox_reference": self.textbox_reference_base,
+                    "base_text_wrap_reference": self.text_wrap_reference_base,
+                    "divider_layer": self.divider_layer,
+                    "oracle_text": self.layout.oracle_text,
+                    "flavor_text": self.layout.flavor_text,
+                }
+            ]
+
+            if (
+                isinstance(self.layout, AdventureLayout)
+                and self.text_layer_rules_adventure
+                and self.textbox_reference_adventure_base
+                and self.text_wrap_reference_adventure_base
             ):
-                rules_text, textbox_ref = right_adjustment
+                # With Adventure cards we need to make sure that
+                # both left and right rules texts fit
+                height_delta = self.textbox_reference_adventure_base.dims["height"]
+                textboxes_to_adjust.append(
+                    {
+                        "base_text_layer": self.text_layer_rules_adventure,
+                        "base_textbox_reference": self.textbox_reference_adventure_base,
+                        "base_text_wrap_reference": self.text_wrap_reference_adventure_base,
+                        "divider_layer": self.divider_layer,
+                        "oracle_text": self.layout.oracle_text_adventure,
+                        "flavor_text": self.layout.flavor_text_adventure,
+                        "height_padding": height_delta,
+                    }
+                )
 
-                if (
-                    self.is_adventure
-                    and self.text_layer_rules_adventure
-                    and self.textbox_reference_adventure_base
-                    and self.text_wrap_reference_adventure_base
-                ):
-                    # With Adventure cards we need to make sure that
-                    # both left and right rules texts fit
-                    height_delta = self.textbox_reference_adventure_base.dims["height"]
+            # Adjust textboxes to fit rules text of fixed font size
+            sized_boxes = self.adjust_textboxes_for_font_size(
+                self.rules_text_font_size, textboxes_to_adjust
+            )
 
-                    if left_adjustment := self.adjust_textbox_for_font_size(
-                        self.text_layer_rules_adventure,
-                        self.textbox_reference_adventure_base,
-                        self.text_wrap_reference_adventure_base,
-                        divider_layer=self.divider_layer,
-                        oracle_text=self.layout.oracle_text_adventure,
-                        flavor_text=self.layout.flavor_text_adventure,
-                        min_top=textbox_ref.dims["top"] + height_delta,
-                    ):
-                        rules_text_left, textbox_ref_left = left_adjustment
-                        left_height = textbox_ref_left.dims["height"] + height_delta
+            rules_text, textbox_ref, _ = sized_boxes[0]
+            self.text_layer_rules = rules_text
+            ref = textbox_ref
 
-                        if left_height > textbox_ref.dims["height"]:
-                            # We need to make the right textbox higher
-                            rules_text.remove()
-                            textbox_ref.remove()
-                            if right_adjustment := self.adjust_textbox_for_font_size(
-                                self.text_layer_rules_base,
-                                self.textbox_reference_base,
-                                self.text_wrap_reference_base,
-                                divider_layer=self.divider_layer,
-                                oracle_text=self.layout.oracle_text,
-                                flavor_text=self.layout.flavor_text,
-                                min_top=textbox_ref_left.dims["top"] - height_delta,
-                            ):
-                                rules_text, textbox_ref = right_adjustment
+            if self.is_adventure:
+                rules_text_left, textbox_ref_left, _ = sized_boxes[1]
 
-                            # Some unknown interaction causes textbox_ref_left to turn visible
-                            # during the recreation of the right textbox
-                            textbox_ref_left.visible = False
-
-                        self.text_layer_rules_adventure = rules_text_left
-                        self.textbox_reference_adventure = textbox_ref_left
-
-                self.text_layer_rules = rules_text
-                ref = textbox_ref
+                self.text_layer_rules_adventure = rules_text_left
+                self.textbox_reference_adventure = textbox_ref_left
         elif (
             not self.is_textless
             and self.supports_dynamic_textbox_height
@@ -737,11 +776,9 @@ class BorderlessShowcase(
 
     @cached_property
     def name_normal_pinline_shape(self) -> ArtLayer | None:
-        if layer_set := getLayerSet(
-            LAYERS.NORMAL,
-            [self.pinlines_shape_group, LAYERS.NAME],
-        ):
-            return getLayer(LAYERS.NORMAL, layer_set)
+        return getLayer(
+            LAYERS.NORMAL, (self.pinlines_shape_group, LAYERS.NAME, LAYERS.NORMAL)
+        )
 
     @cached_property
     def twins_horizontal_delta(self) -> float | int:
@@ -793,8 +830,10 @@ class BorderlessShowcase(
             layers.append(self.name_normal_pinline_shape)
 
         # Add nickname pinlines if required
-        if self.is_nickname:
-            layers.append(getLayerSet(LAYERS.NICKNAME, _shape_group))
+        if self.is_nickname and (
+            layer_set := getLayerSet(LAYERS.NICKNAME, _shape_group)
+        ):
+            layers.append(layer_set)
 
         if self.is_planeswalker:
             if layer_set := getLayerSet(self.size, _shape_group):
@@ -1094,19 +1133,23 @@ class BorderlessShowcase(
         oracle_text: str,
         flavor_text: str | None,
         min_top: float | int | None = None,
-    ) -> tuple[ArtLayer, ReferenceLayer] | None:
+        align_to: float | int | None = None,
+    ) -> tuple[ArtLayer, ReferenceLayer, float] | None:
         """Calculates the required size for rules textbox when the rules text has a fixed font size."""
         doc_height: float | int = APP.activeDocument.height
         min_top = min_top if min_top is not None else doc_height
 
-        # Set and format rules text
-        self.format_temp_rules_text(
-            base_text_layer, divider_layer, oracle_text, flavor_text
-        )
+        if align_to is not None:
+            top = min_top
+        else:
+            # Set and format rules text
+            self.format_temp_rules_text(
+                base_text_layer, divider_layer, oracle_text, flavor_text
+            )
+            dims_rules_text = get_layer_dimensions(base_text_layer)
+            top = min(dims_rules_text["top"], min_top)
 
         dims_wrap_ref = base_text_wrap_reference.dims
-        dims_rules_text = get_layer_dimensions(base_text_layer)
-        top = min(dims_rules_text["top"], min_top)
         bottom = doc_height + 500
         text_ref_shape = create_shape_layer(
             (
@@ -1209,18 +1252,31 @@ class BorderlessShowcase(
                 shaped_text, divider_layer, oracle_text, flavor_text
             )
 
+        dims_text_ref_shape = get_layer_dimensions(shaped_text)
+        align_y = (
+            align_to
+            if align_to is not None
+            else dims_text_ref_shape["top"]
+            + ((dims_textbox_ref["bottom"] - dims_text_ref_shape["top"]) / 2)
+        )
+        mock_dims: LayerDimensions = {
+            **dims_textbox_ref,
+            "center_y": align_y,
+        }
+
         # Center text vertically
-        half_padding = -self.rules_text_padding / 2
         align_dimension(
             shaped_text,
-            reference_dimensions=dims_textbox_ref,
-            alignment_dimension="bottom",
-            offset=half_padding,
+            reference_dimensions=mock_dims,
+            alignment_dimension="center_y",
         )
 
         base_text_layer.visible = False
-        dims_text_ref_shape = get_layer_dimensions(shaped_text)
-        top_ref = dims_text_ref_shape["top"] + half_padding
+        top_ref = (
+            min_top
+            if align_to is not None
+            else get_layer_dimensions(shaped_text)["top"] - self.rules_text_padding / 2
+        )
         return (
             shaped_text,
             ReferenceLayer(
@@ -1246,7 +1302,96 @@ class BorderlessShowcase(
                     hide=True,
                 )
             ),
+            align_y,
         )
+
+    def adjust_textboxes_for_font_size(
+        self, font_size: int | float, textbox_args: list[TextboxSizingArgs]
+    ) -> list[tuple[ArtLayer, ReferenceLayer, float]]:
+        """
+        Adjusts multiple textboxes, whose bottom edges are aligned horizontally,
+        to font size so that all the textboxes will end up with the same height.
+        """
+        doc_height: float | int = APP.activeDocument.height
+
+        # Size the textboxes starting from the one with most characters in its text
+        # in the hope that we avoid resizing textboxes that way.
+        textbox_args_sorted = textbox_args.copy()
+        textbox_args_sorted.sort(
+            key=lambda args: len(args["oracle_text"]) + len(args["flavor_text"] or ""),
+            reverse=True,
+        )
+
+        sizes: list[tuple[ArtLayer, ReferenceLayer, float]] = []
+        tallest_top: float | int = 0
+        tallest_height: float | int = 0
+        tallest_align: float = 0
+        tallest_idx: int = -1
+        # First pass of sizing
+        for idx, arg in enumerate(textbox_args_sorted):
+            height_padding = arg.get("height_padding", 0) or 0
+            sized = self.adjust_textbox_for_font_size(
+                base_text_layer=arg["base_text_layer"],
+                base_textbox_reference=arg["base_textbox_reference"],
+                base_text_wrap_reference=arg["base_text_wrap_reference"],
+                divider_layer=arg["divider_layer"],
+                oracle_text=arg["oracle_text"],
+                flavor_text=arg["flavor_text"],
+                min_top=min(
+                    arg.get("min_top", doc_height) or doc_height,
+                    tallest_top + height_padding,
+                )
+                or None,
+            )
+            # Some unknown interaction causes the previous reference layer
+            # to turn visible when starting a new sizing loop. Selecting some
+            # other layer seems to fix it without causing side effects.
+            select_layer(self.art_layer)
+            if sized:
+                sizes.append(sized)
+                if (
+                    height := sized[1].dims["height"] + height_padding
+                ) > tallest_height:
+                    tallest_top = sized[1].dims["top"] - height_padding
+                    tallest_height = height
+                    tallest_align = sized[2]
+                    tallest_idx = idx
+            else:
+                raise ValueError(
+                    f"Textbox sizing failed for {arg['base_text_layer'].name}"
+                )
+
+        # Resize all shorter layers to match the tallest
+        for idx, ((layer, ref, _), arg) in enumerate(
+            zip(sizes.copy(), textbox_args_sorted)
+        ):
+            orig_idx = textbox_args.index(arg)
+
+            if idx == tallest_idx:
+                sizes[orig_idx] = sizes[idx]
+                continue
+
+            height_padding = arg.get("height_padding", 0) or 0
+            layer.remove()
+            ref.remove()
+            sized = self.adjust_textbox_for_font_size(
+                base_text_layer=arg["base_text_layer"],
+                base_textbox_reference=arg["base_textbox_reference"],
+                base_text_wrap_reference=arg["base_text_wrap_reference"],
+                divider_layer=arg["divider_layer"],
+                oracle_text=arg["oracle_text"],
+                flavor_text=arg["flavor_text"],
+                min_top=tallest_top + height_padding,
+                align_to=tallest_align,
+            )
+            if sized:
+                sizes[orig_idx] = sized
+            else:
+                raise ValueError(
+                    f"Textbox resizing failed for {arg['base_text_layer'].name}"
+                )
+
+        return sizes
 
     def disable_text_area_scaling(self, text_area: FormattedTextArea) -> None:
         text_area.scale_height = False
@@ -1255,6 +1400,10 @@ class BorderlessShowcase(
         text_area.fix_overflow_width = False
 
     def rules_text_and_pt_layers(self) -> None:
+        if self.is_split and self.rules_text_font_size:
+            # Split cards don't have PT text and rules text is already adjusted elsewhere
+            return
+
         if self.is_planeswalker:
             if self.text_layer_rules_base:
                 self.text_layer_rules_base.visible = False
@@ -1276,48 +1425,64 @@ class BorderlessShowcase(
                     self.disable_text_area_scaling(entry)
                     break
 
-        if self.is_battle:
+        if isinstance(self.layout, BattleLayout):
             for entry in self.text:
                 if entry and entry.layer == self.text_layer_pt:
                     entry.contents = self.layout.defense
 
     def textbox_positioning(self) -> None:
-        # Get the delta between the highest box and the target box
-        ref_group = getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group)
-        ref = (
-            get_reference_layer(LAYERS.TEXTLESS, ref_group)
-            if self.is_vertical_layout
-            else self.textbox_reference
-        )
-        if ref and self.textbox_reference_base:
-            delta = ref.dims["top"] - self.textbox_reference_base.dims["top"]
+        if self.is_split:
+            ref = self.textbox_references[0]
+            ref_base = get_reference_layer(
+                f"{LAYER_NAMES.REFERENCE} {LAYERS.LEFT}", self.textbox_reference_group
+            )
+            if ref and ref_base:
+                delta = ref.dims["top"] - ref_base.dims["top"]
 
-            # Shift typeline text
-            if self.text_layer_type:
-                self.text_layer_type.translate(0, delta)
-
-            # Shift typeline pinline
-            if self.typeline_pinline_shape:
-                self.typeline_pinline_shape.translate(0, delta)
-
-            # Shift expansion symbol
-            if CFG.symbol_enabled and self.expansion_symbol_layer:
-                self.expansion_symbol_layer.translate(0, delta)
-
-            # Shift indicator
-            if self.is_type_shifted and self.indicator_group:
-                self.indicator_group.parent.translate(0, delta)
-
-            # Shift relevant Adventure layers
-            if self.is_adventure:
-                for layer in (
-                    self.text_layer_name_adventure,
-                    self.text_layer_mana_adventure,
-                    self.text_layer_type_adventure,
-                    self.adventure_pinlines_group,
-                ):
+                layers: list[ArtLayer | LayerSet | None] = [
+                    *self.text_layers_type,
+                    *self.typeline_pinlines_layers,
+                    *self.expansion_symbols,
+                ]
+                for layer in layers:
                     if layer:
                         layer.translate(0, delta)
+        else:
+            ref = (
+                get_reference_layer(LAYERS.TEXTLESS, self.textbox_reference_group)
+                if self.is_vertical_layout
+                else self.textbox_reference
+            )
+            if ref and self.textbox_reference_base:
+                # Get the delta between the highest box and the target box
+                delta = ref.dims["top"] - self.textbox_reference_base.dims["top"]
+
+                # Shift typeline text
+                if self.text_layer_type:
+                    self.text_layer_type.translate(0, delta)
+
+                # Shift typeline pinline
+                if self.typeline_pinline_shape:
+                    self.typeline_pinline_shape.translate(0, delta)
+
+                # Shift expansion symbol
+                if CFG.symbol_enabled and self.expansion_symbol_layer:
+                    self.expansion_symbol_layer.translate(0, delta)
+
+                # Shift indicator
+                if self.is_type_shifted and self.indicator_group:
+                    self.indicator_group.parent.translate(0, delta)
+
+                # Shift relevant Adventure layers
+                if self.is_adventure:
+                    for layer in (
+                        self.text_layer_name_adventure,
+                        self.text_layer_mana_adventure,
+                        self.text_layer_type_adventure,
+                        self.adventure_pinlines_group,
+                    ):
+                        if layer:
+                            layer.translate(0, delta)
 
     def pw_enable_loyalty_graphics(self) -> None:
         if self.is_planeswalker:
@@ -1328,6 +1493,7 @@ class BorderlessShowcase(
         methods = super().text_layer_methods
         if not self.is_planeswalker:
             methods.remove(self.pw_text_layers)
+        methods.insert(0, self.adjust_split_textboxes_to_font_size)
         return methods
 
     @property
@@ -1375,7 +1541,7 @@ class BorderlessShowcase(
     # region Adventure
 
     def enable_adventure_layers(self) -> None:
-        if self.adventure_pinlines_group:
+        if isinstance(self.layout, AdventureLayout) and self.adventure_pinlines_group:
             self.adventure_pinlines_group.visible = True
             self.generate_layer(
                 group=self.adventure_pinlines_group,
@@ -1478,3 +1644,234 @@ class BorderlessShowcase(
         return super().frame_layers_saga()
 
     # endregion Saga
+
+    # region Split
+
+    @cached_property
+    def fuse_gradient_locations(self) -> dict[int, list[int | float]]:
+        return self.gradient_location_map
+
+    @cached_property
+    def pinline_gradient_locations(self) -> list[dict[int, list[int | float]]]:
+        # At the time of writing there are no split cards with more than 2 colors per side.
+        return [
+            {**self.gradient_location_map, 2: [0.25, 0.30]},
+            {**self.gradient_location_map, 2: [0.70, 0.75]},
+        ]
+
+    def frame_layers_split(self):
+        if self.is_fuse:
+            if self.fuse_pinline:
+                self.fuse_pinline.visible = True
+            if self.text_layer_fuse:
+                self.text_layer_fuse.visible = True
+        if self.flip_twins:
+            self.name_pinlines_layers
+        for layer in self.typeline_pinlines_layers:
+            if layer:
+                layer.visible = True
+        for i in range(len(self.sides)):
+            if group := self.pinlines_groups_split[i]:
+                # Apply pinlines colors
+                self.generate_layer(group=group, colors=self.pinlines_colors_split[i])
+
+    def flip_split_layers(self, layers: list[ArtLayer | None]) -> None:
+        if (layer_a := layers[0]) and (layer_b := layers[1]):
+            dims_a = get_layer_dimensions(layer_a)
+            dims_b = get_layer_dimensions(layer_b)
+            half_doc_width: float | int = APP.activeDocument.width / 2
+            delta = half_doc_width - (dims_b["left"] - half_doc_width) - dims_a["right"]
+            for layer in layers:
+                if layer:
+                    flip_layer(layer, FlipDirection.Horizontal)
+                    layer.translate(delta, 0)
+
+    @cached_property
+    def name_pinlines_layers(self) -> list[ArtLayer | None]:
+        layers = [
+            getLayer(
+                LAYERS.NORMAL,
+                (side, LAYERS.PINLINES, LAYERS.SHAPE, LAYERS.NAME, LAYERS.NORMAL),
+            )
+            for side in self.card_groups
+        ]
+
+        if self.flip_twins:
+            self.flip_split_layers(layers)
+
+        return layers
+
+    @cached_property
+    def typeline_pinlines_layers(self) -> list[ArtLayer | None]:
+        if self.has_unified_typeline:
+            if (
+                layer := getLayer(
+                    LAYER_NAMES.UNIFIED,
+                    (self.pinlines_group, LAYERS.SHAPE, LAYERS.TYPE_LINE),
+                )
+            ) and self.flip_twins:
+                flip_layer(layer, FlipDirection.Horizontal)
+                dims = get_layer_dimensions(layer)
+                layer.translate(APP.activeDocument.width - 2 * dims["center_x"], 0)
+
+            return [layer]
+
+        layers = [
+            getLayer(
+                LAYERS.TYPE_LINE,
+                (group, LAYERS.PINLINES, LAYERS.SHAPE, LAYERS.TYPE_LINE),
+            )
+            for group in self.card_groups
+        ]
+
+        if self.flip_twins:
+            self.flip_split_layers(layers)
+
+        return layers
+
+    @cached_property
+    def fuse_pinline(self) -> ArtLayer | None:
+        return getLayer(
+            LAYER_NAMES.FUSE, (self.pinlines_group, LAYERS.SHAPE, LAYER_NAMES.FUSE)
+        )
+
+    @cached_property
+    def textbox_references(self) -> list[ReferenceLayer | None]:
+        refs = [
+            get_reference_layer(
+                f"{LAYER_NAMES.REFERENCE} {side}", self.textbox_reference_group
+            )
+            for side in self.sides
+        ]
+
+        if self.is_fuse and self.fuse_reference:
+            for idx, ref in enumerate(refs):
+                if ref:
+                    name = ref.name
+                    fuse_ref_duplicate = self.fuse_reference.duplicate(
+                        ref, ElementPlacement.PlaceBefore
+                    )
+                    new_ref = merge_shapes(
+                        fuse_ref_duplicate,
+                        ref,
+                        operation=ShapeOperation.SubtractFront,
+                    )
+                    new_ref.name = name
+                    new_ref.visible = False
+                    refs[idx] = ReferenceLayer(new_ref)
+
+        if self.textbox_height and not self.rules_text_font_size:
+            # Create fixed size textbox references
+            created_refs: list[ReferenceLayer | None] = []
+            for ref in refs:
+                if ref:
+                    dims = ref.dims
+                    top = dims["bottom"] - self.textbox_height
+                    created_ref = create_shape_layer(
+                        (
+                            {"x": dims["left"], "y": top},
+                            {"x": dims["right"], "y": top},
+                            {"x": dims["right"], "y": dims["bottom"]},
+                            {"x": dims["left"], "y": dims["bottom"]},
+                        ),
+                        relative_layer=ref,
+                        placement=ElementPlacement.PlaceBefore,
+                        hide=True,
+                    )
+                    created_refs.append(ReferenceLayer(created_ref))
+                else:
+                    created_refs.append(None)
+            refs = created_refs
+
+        return refs
+
+    @cached_property
+    def text_wrap_references(self) -> list[ReferenceLayer | None]:
+        return [
+            get_reference_layer(
+                f"{LAYER_NAMES.TEXT_REFERENCE} {side}", self.rules_text_group
+            )
+            for side in self.sides
+        ]
+
+    @cached_property
+    def expansion_references(self) -> list[ReferenceLayer | None]:
+        return [
+            get_reference_layer(f"{LAYERS.EXPANSION_REFERENCE} {side}", self.text_group)
+            for side in self.sides
+        ]
+
+    @cached_property
+    def fuse_reference(self) -> ReferenceLayer | None:
+        return get_reference_layer(
+            f"{LAYER_NAMES.FUSE} {LAYER_NAMES.REFERENCE}", self.text_group
+        )
+
+    @cached_property
+    def text_layers_name(self) -> list[ArtLayer | None]:
+        return [
+            getLayer(f"{LAYERS.NAME} {side}", self.text_group) for side in self.sides
+        ]
+
+    @cached_property
+    def text_layers_rules(self) -> list[ArtLayer | None]:
+        return [
+            getLayer(f"{LAYERS.RULES_TEXT} {side}", self.rules_text_group)
+            for side in self.sides
+        ]
+
+    @cached_property
+    def text_layers_type(self) -> list[ArtLayer | None]:
+        layers = [
+            getLayer(f"{LAYERS.TYPE_LINE} {side}", self.text_group)
+            for side in self.sides
+        ]
+        if self.has_unified_typeline:
+            for idx, layer in enumerate(layers[1:]):
+                if layer:
+                    layer.visible = False
+                    layers[idx + 1] = None
+
+        return layers
+
+    @cached_property
+    def text_layers_mana(self) -> list[ArtLayer | None]:
+        return [
+            getLayer(f"{LAYERS.MANA_COST} {side}", self.text_group)
+            for side in self.sides
+        ]
+
+    @cached_property
+    def text_layer_fuse(self) -> ArtLayer | None:
+        return getLayer(f"{LAYER_NAMES.FUSE} {LAYERS.TEXT}", self.text_group)
+
+    def adjust_split_textboxes_to_font_size(self):
+        if self.rules_text_font_size and isinstance(self.layout, SplitLayout):
+            args: list[TextboxSizingArgs] = []
+            for text_layer, text_wrap_ref, textbox_ref, divider, flavor, oracle in zip(
+                self.text_layers_rules,
+                self.text_wrap_references,
+                self.textbox_references,
+                self.rules_text_dividers,
+                self.layout.flavor_texts,
+                self.layout.oracle_texts,
+            ):
+                if textbox_ref:
+                    args.append(
+                        {
+                            "base_text_layer": text_layer,
+                            "base_text_wrap_reference": text_wrap_ref,
+                            "base_textbox_reference": textbox_ref,
+                            "divider_layer": divider,
+                            "flavor_text": flavor,
+                            "oracle_text": oracle,
+                        }
+                    )
+            sized_boxes = self.adjust_textboxes_for_font_size(
+                self.rules_text_font_size, args
+            )
+
+            self.text_layers_rules = [layer for layer, _, _ in sized_boxes]
+            self.textbox_references = [ref for _, ref, _ in sized_boxes]
+
+    # endregion Split

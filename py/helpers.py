@@ -40,6 +40,8 @@ class LAYER_NAMES(StrEnum):
     REFERENCES = "References"
     TEXT_REFERENCE = "Text Reference"
     OVERFLOW_REFERENCE = "Overflow Reference"
+    UNIFIED = "Unified"
+    FUSE = "Fuse"
 
 
 class ExpansionSymbolOverrideMode(Enum):
@@ -182,6 +184,7 @@ class FlipDirection(StrEnum):
 
 
 def flip_layer(layer: ArtLayer | LayerSet, direction: FlipDirection):
+    layer.visible = True
     select_layer(layer)
     desc = ActionDescriptor()
     desc.putEnumerated(cID("Axis"), cID("Ornt"), cID(direction))

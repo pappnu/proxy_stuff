@@ -22,11 +22,16 @@ def get_layer_path(layer: ArtLayer) -> tuple[Any, bool]:
     select_layer(layer, make_visible=True)
 
     layer_path: Any = None
-    paths: list[Any] = APP.activeDocument.pathItems
+    fallback: Any = None
+    paths: Iterable[Any] = APP.activeDocument.pathItems
     for path in paths:
-        if path.name == f"{layer.name} Shape Path":
+        if (
+            path.name == f"{layer.name} Shape Path"
+            or path.name == f"{layer.name} Type Path"
+        ):
             layer_path = path
             break
+        fallback = path
 
     # Seems that the paths are somewhat cached(?), so if a path earlier in the list is
     # same as a path later in the list they get same values even though Photoshop GUI
@@ -36,7 +41,9 @@ def get_layer_path(layer: ArtLayer) -> tuple[Any, bool]:
         print(
             f"Warning: Path selection failed for '{layer.name}'. Defaulting to the last path."
         )
-        layer_path = paths[1]
+        if not fallback:
+            raise ValueError("No paths found")
+        layer_path = fallback
     return layer_path, visible_state
 
 
