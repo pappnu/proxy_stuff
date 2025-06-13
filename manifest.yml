@@ -40,6 +40,7 @@ borderless-showcase.psd:
         - case
         - class
         - battle
+        - prototype
 
 borderless-showcase-split.psd:
   name: "Borderless Showcase"

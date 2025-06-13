@@ -13,17 +13,22 @@ from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
 from src.enums.settings import BorderlessTextbox
 from src.helpers.bounds import LayerDimensions, get_layer_dimensions
-from src.helpers.colors import get_pinline_gradient, get_rgb
+from src.helpers.colors import GradientConfig, get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.helpers.position import check_reference_overlap
-from src.helpers.text import get_font_size, get_line_count, set_text_size_and_leading
+from src.helpers.text import (
+    get_font_size,
+    get_line_count,
+    set_text_size_and_leading,
+)
 from src.layouts import (
     AdventureLayout,
     BattleLayout,
     LevelerLayout,
     MutateLayout,
     PlaneswalkerLayout,
+    PrototypeLayout,
     SplitLayout,
 )
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
@@ -34,7 +39,7 @@ from src.templates.planeswalker import PlaneswalkerMod
 from src.templates.saga import SagaMod
 from src.templates.split import SplitMod
 from src.templates.transform import TransformMod
-from src.text_layers import FormattedTextArea, TextField
+from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
 
 from .backup import BackupAndRestore
@@ -261,6 +266,10 @@ class BorderlessShowcase(
     @cached_property
     def is_leveler(self) -> bool:
         return isinstance(self.layout, LevelerLayout)
+
+    @cached_property
+    def is_prototype(self) -> bool:
+        return isinstance(self.layout, PrototypeLayout)
 
     @cached_property
     def is_pt_enabled(self) -> bool:
@@ -910,6 +919,8 @@ class BorderlessShowcase(
             methods.append(self.enable_adventure_layers)
         if self.is_leveler:
             methods.append(self.frame_layers_leveler)
+        if self.is_prototype:
+            methods.append(self.frame_layers_prototype)
         return methods
 
     # endregion Frame
@@ -1448,11 +1459,15 @@ class BorderlessShowcase(
                     if layer:
                         layer.translate(0, delta)
         else:
-            ref = (
-                get_reference_layer(LAYERS.TEXTLESS, self.textbox_reference_group)
-                if self.is_vertical_layout
-                else self.textbox_reference
-            )
+            if self.is_prototype:
+                ref = ReferenceLayer(self.prototype_manabox_shape)
+                ref.dims["top"] -= self.rules_text_padding / 2
+            else:
+                ref = (
+                    get_reference_layer(LAYERS.TEXTLESS, self.textbox_reference_group)
+                    if self.is_vertical_layout
+                    else self.textbox_reference
+                )
             if ref and self.textbox_reference_base:
                 # Get the delta between the highest box and the target box
                 delta = ref.dims["top"] - self.textbox_reference_base.dims["top"]
@@ -1493,6 +1508,8 @@ class BorderlessShowcase(
         methods = super().text_layer_methods
         if not self.is_planeswalker:
             methods.remove(self.pw_text_layers)
+        if self.is_prototype:
+            methods.append(self.text_layers_prototype)
         methods.insert(0, self.adjust_split_textboxes_to_font_size)
         return methods
 
@@ -1508,6 +1525,8 @@ class BorderlessShowcase(
             methods.remove(self.pw_layer_positioning)
         if self.is_adventure and not self.rules_text_font_size:
             methods.append(self.match_adventure_font_sizes)
+        if self.is_prototype:
+            methods.insert(0, self.post_text_layers_prototype)
         return [
             *methods,
             self.expansion_symbol_handler,
@@ -1875,3 +1894,142 @@ class BorderlessShowcase(
             self.textbox_references = [ref for _, ref, _ in sized_boxes]
 
     # endregion Split
+
+    # region Prototype
+
+    _prototype_manabox_colors: dict[str, ColorObject] = {
+        "W": "#afa591",
+        "U": "#0c7798",
+        "B": "#585757",
+        "R": "#a2442e",
+        "G": "#305e3a",
+        "Gold": "#826b3f",
+        "Land": "#82837f",
+        "Artifact": "#6c7a84",
+        # The ones below were not defined in Proxyshop's Prototype template
+        "Colorless": "#e6ecf2",
+        "Vehicle": "#4d2d05",
+    }
+
+    @cached_property
+    def prototype_manabox_colors(
+        self,
+    ) -> ColorObject | list[ColorObject] | list[GradientConfig] | None:
+        if isinstance(self.layout, PrototypeLayout):
+            return get_pinline_gradient(
+                colors=self.layout.proto_color,
+                color_map=self._prototype_manabox_colors,
+                location_map=self.gradient_location_map,
+            )
+
+    @cached_property
+    def prototype_pinlines_colors(
+        self,
+    ) -> ColorObject | list[ColorObject] | list[GradientConfig] | None:
+        if isinstance(self.layout, PrototypeLayout):
+            return get_pinline_gradient(
+                colors=self.layout.proto_color,
+                color_map=self.pinlines_color_map,
+                location_map=self.gradient_location_map,
+            )
+
+    @cached_property
+    def prototype_group(self) -> LayerSet | None:
+        return getLayerSet(LAYER_NAMES.PROTOTYPE)
+
+    @cached_property
+    def prototype_manabox_group(self) -> LayerSet | None:
+        return getLayerSet(LAYER_NAMES.MANABOX, self.prototype_group)
+
+    @cached_property
+    def prototype_pt_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.PT_BOX, self.prototype_group)
+
+    @cached_property
+    def rules_text_reference_prototype(self) -> ReferenceLayer | None:
+        return get_reference_layer(LAYER_NAMES.TEXT_REFERENCE, self.prototype_group)
+
+    @cached_property
+    def prototype_manabox_shape(self) -> ArtLayer | None:
+        if isinstance(self.layout, PrototypeLayout):
+            size = "2" if self.layout.proto_mana_cost.count("{") <= 2 else "3"
+            return getLayer(size, self.prototype_manabox_group)
+
+    @cached_property
+    def prototype_pt_box_shape(self) -> ArtLayer | None:
+        return getLayer(LAYERS.PT_BOX, self.prototype_pt_group)
+
+    @cached_property
+    def text_layer_rules_prototype(self) -> ArtLayer | None:
+        return getLayer(LAYERS.RULES_TEXT, self.prototype_group)
+
+    @cached_property
+    def text_layer_mana_prototype(self) -> ArtLayer | None:
+        return getLayer(LAYERS.MANA_COST, self.prototype_group)
+
+    @cached_property
+    def text_layer_pt_prototype(self) -> ArtLayer | None:
+        return getLayer(LAYERS.POWER_TOUGHNESS, self.prototype_group)
+
+    def frame_layers_prototype(self) -> None:
+        if self.prototype_group:
+            self.prototype_group.visible = True
+        if self.prototype_manabox_shape:
+            self.prototype_manabox_shape.visible = True
+
+        # Colors
+        if self.prototype_manabox_group and self.prototype_manabox_colors:
+            self.generate_layer(
+                group=self.prototype_manabox_group, colors=self.prototype_manabox_colors
+            )
+        if self.prototype_pt_group and self.prototype_pinlines_colors:
+            self.generate_layer(
+                group=self.prototype_pt_group, colors=self.prototype_pinlines_colors
+            )
+
+    def text_layers_prototype(self) -> None:
+        if isinstance(self.layout, PrototypeLayout):
+            if self.text_layer_mana_prototype:
+                self.text.append(
+                    FormattedTextField(
+                        layer=self.text_layer_mana_prototype,
+                        contents=self.layout.proto_mana_cost,
+                    )
+                )
+            if self.text_layer_pt_prototype:
+                self.text.append(
+                    TextField(
+                        layer=self.text_layer_pt_prototype,
+                        contents=self.layout.proto_pt,
+                    )
+                )
+
+    def post_text_layers_prototype(self) -> None:
+        if isinstance(self.layout, PrototypeLayout):
+            if self.text_layer_rules_prototype:
+                self.text_layer_rules_prototype.textItem.size = (
+                    self.text_layer_rules.textItem.size
+                )
+                text_area = FormattedTextArea(
+                    layer=self.text_layer_rules_prototype,
+                    contents="Prototype"
+                    if CFG.remove_reminder
+                    else self.text_layer_rules_prototype.textItem.contents,
+                    reference=self.rules_text_reference_prototype,
+                )
+                self.disable_text_area_scaling(text_area)
+                if text_area.validate():
+                    text_area.execute()
+
+        # Move Prototype elements on top of normal rules text
+        if (
+            self.textbox_reference
+            and self.prototype_group
+            and self.prototype_pt_box_shape
+        ):
+            pt_dims = get_layer_dimensions(self.prototype_pt_box_shape)
+            ref_dims = self.textbox_reference.dims
+            delta = ref_dims["top"] - pt_dims["bottom"]
+            self.prototype_group.translate(0, delta)
+
+    # endregion Prototype

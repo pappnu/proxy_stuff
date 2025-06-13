@@ -42,6 +42,8 @@ class LAYER_NAMES(StrEnum):
     OVERFLOW_REFERENCE = "Overflow Reference"
     UNIFIED = "Unified"
     FUSE = "Fuse"
+    PROTOTYPE = "Prototype"
+    MANABOX = "Manabox"
 
 
 class ExpansionSymbolOverrideMode(Enum):
