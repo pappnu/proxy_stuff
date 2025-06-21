@@ -1170,6 +1170,8 @@ class BorderlessShowcase(
                 {"x": dims_wrap_ref["left"], "y": bottom},
             ),
             hide=True,
+            relative_layer=base_text_layer,
+            placement=ElementPlacement.PlaceBefore,
         )
 
         # Assign the text to a shape to make sure that the text wraps consistently
@@ -1616,6 +1618,7 @@ class BorderlessShowcase(
                     )
                     if text_area.validate():
                         text_area.execute()
+                    break
 
     # endregion Adventure
 
