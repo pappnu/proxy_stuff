@@ -68,7 +68,7 @@ Thanks to all to those that have helped in various ways with the development of 
 - Kapa the Bard, creator of Polymath Proxy
 - [Alex Taxiera](https://github.com/alex-taxiera)
 
-This plugin uses assets from existing Proxyshop templates, so look at [Proxshop's credits](https://github.com/Investigamer/Proxyshop#-credits) too see whose work those are.
+This plugin uses assets from existing Proxyshop templates, so look at [Proxyshop's credits](https://github.com/Investigamer/Proxyshop#-credits) too see whose work those are.
 
 ## Licence
 
