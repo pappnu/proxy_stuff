@@ -37,6 +37,10 @@ Ensure that you have the latest Proxyshop build (see [Requirements](#requirement
 
 If you get a confirmation dialog that says "This opeartion will turn a live shape into a regular path. Continue?", tick the "Don't show again" checkbox and press "Yes". Then try rendering the card again.
 
+### File not found error is raised
+
+If you get an error similar to `FileNotFoundError: [Errno 2] No such file or directory: 'path\to\proxy_stuff\dist\<some_name>.js'`, you should use a [prebuilt release](https://github.com/pappnu/proxy_stuff/releases) or transpile the TypeScript scripts yourself as described in the [Development environment](#development-environment) section.
+
 ### None of the above help
 
 You could open an issue. Make sure to attach the error log, if one exists, from Proxyshop to your issue.
