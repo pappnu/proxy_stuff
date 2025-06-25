@@ -999,13 +999,19 @@ class BorderlessShowcase(
             and self.pt_text_reference
             and self.text_wrap_reference
         ):
-            pt_ref_copy = self.pt_text_reference.duplicate(
-                self.text_wrap_reference, ElementPlacement.PlaceBefore
-            )
             textbox_ref_shape = merge_shapes(
-                pt_ref_copy,
+                self.pt_text_reference.duplicate(
+                    self.text_wrap_reference, ElementPlacement.PlaceBefore
+                ),
                 self.text_wrap_reference,
                 operation=ShapeOperation.SubtractFront,
+            )
+            textbox_ref_shape = merge_shapes(
+                textbox_ref_shape,
+                self.textbox_overflow_reference.duplicate(
+                    textbox_ref_shape, ElementPlacement.PlaceBefore
+                ),
+                operation=ShapeOperation.Unite,
             )
             layer = create_text_layer_with_path(textbox_ref_shape, layer)
         return layer
