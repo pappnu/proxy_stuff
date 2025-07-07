@@ -54,6 +54,7 @@ from .helpers import (
     is_color_identity,
     parse_hex_color_list,
 )
+from .utils.layer_fx import get_stroke_details
 from .utils.path import create_shape_layer
 from .utils.text import align_dimension
 from .uxp.shape import ShapeOperation, merge_shapes
@@ -1430,18 +1431,25 @@ class BorderlessShowcase(
 
         super().rules_text_and_pt_layers()
 
-        if (
-            self.supports_dynamic_textbox_height
-            and self.rules_text_font_size
-            and self.text_layer_rules
-        ):
-            # Ensure that rules text font size won't be adjusted
+        if self.supports_dynamic_textbox_height:
             for entry in self.text:
                 if (
                     isinstance(entry, FormattedTextArea)
                     and entry.layer is self.text_layer_rules
                 ):
-                    self.disable_text_area_scaling(entry)
+                    if self.rules_text_font_size and self.text_layer_rules:
+                        # Ensure that rules text font size won't be adjusted
+                        self.disable_text_area_scaling(entry)
+                    elif entry.reference_dims and (
+                        stroke_details := get_stroke_details(entry.layer)
+                    ):
+                        # Add enough padding to offset stroke
+                        # TODO Figure out a cleaner way to do this. Possibly by extending FormattedTextArea?
+                        entry.reference_dims = {
+                            **entry.reference_dims,
+                            "height": entry.reference_dims["height"]
+                            - stroke_details["size"],
+                        }
                     break
 
         if isinstance(self.layout, BattleLayout):
