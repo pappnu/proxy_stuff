@@ -39,6 +39,7 @@ class LAYER_NAMES(StrEnum):
     REFERENCE = "Reference"
     REFERENCES = "References"
     TEXT_REFERENCE = "Text Reference"
+    TEXT_REFERENCE_CREATURE = "Text Reference - Creature"
     OVERFLOW_REFERENCE = "Overflow Reference"
     UNIFIED = "Unified"
     FUSE = "Fuse"

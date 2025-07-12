@@ -30,6 +30,7 @@ from src.layouts import (
     PlaneswalkerLayout,
     PrototypeLayout,
     SplitLayout,
+    StationLayout,
 )
 from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
 from src.schema.colors import ColorObject, GradientColor
@@ -38,6 +39,7 @@ from src.templates.leveler import LevelerMod
 from src.templates.planeswalker import PlaneswalkerMod
 from src.templates.saga import SagaMod
 from src.templates.split import SplitMod
+from src.templates.station import StationMod
 from src.templates.transform import TransformMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
@@ -74,7 +76,13 @@ class TextboxSizingArgs(TypedDict):
 
 
 class BorderlessShowcase(
-    SplitMod, VerticalMod, PlaneswalkerMod, AdventureMod, LevelerMod, BackupAndRestore
+    SplitMod,
+    VerticalMod,
+    PlaneswalkerMod,
+    AdventureMod,
+    LevelerMod,
+    StationMod,
+    BackupAndRestore,
 ):
     # region Constants
 
@@ -292,9 +300,23 @@ class BorderlessShowcase(
             and not self.is_leveler
         )
 
+    @cached_property
+    def is_centered(self) -> bool:
+        if self.is_station:
+            return False
+        return super().is_centered
+
     # endregion Checks
 
     # region Frame Details
+
+    @cached_property
+    def doc_height(self) -> int | float:
+        return self.docref.height
+
+    @cached_property
+    def doc_width(self) -> int | float:
+        return self.docref.width
 
     @cached_property
     def art_frame_vertical(self) -> str:
@@ -304,15 +326,12 @@ class BorderlessShowcase(
 
     @cached_property
     def size(self) -> str:
-        if self.is_leveler:
-            return BorderlessTextbox.Tall
-
         if self.supports_dynamic_textbox_height and (
             self.textbox_height or self.rules_text_font_size
         ):
             # Return something else than Tall to trigger textbox_positioning
             return BorderlessTextbox.Automatic
-        elif self.is_split:
+        elif self.is_split or self.is_leveler or self.is_station:
             # Disables textbox_positioning
             return BorderlessTextbox.Tall
 
@@ -598,52 +617,142 @@ class BorderlessShowcase(
             and self.textbox_reference_base
             and self.text_wrap_reference_base
         ):
-            textboxes_to_adjust: list[TextboxSizingArgs] = [
-                {
-                    "base_text_layer": self.text_layer_rules_base,
-                    "base_textbox_reference": self.textbox_reference_base,
-                    "base_text_wrap_reference": self.text_wrap_reference_base,
-                    "divider_layer": self.divider_layer,
-                    "oracle_text": self.layout.oracle_text,
-                    "flavor_text": self.layout.flavor_text,
-                }
-            ]
+            if isinstance(self.layout, StationLayout):
+                if self.station_group:
+                    self.station_group.visible = True
 
-            if (
-                isinstance(self.layout, AdventureLayout)
-                and self.text_layer_rules_adventure
-                and self.textbox_reference_adventure_base
-                and self.text_wrap_reference_adventure_base
-            ):
-                # With Adventure cards we need to make sure that
-                # both left and right rules texts fit
-                height_delta = self.textbox_reference_adventure_base.dims["height"]
-                textboxes_to_adjust.append(
+                textbox_ref = self.station_levels_base_text_references[0]
+                stations_len = len(self.layout.stations)
+
+                adjusted_text_layers: list[ArtLayer] = []
+
+                # Adjust Station levels
+                for i in reversed(range(stations_len)):
+                    details = self.layout.stations[i]
+                    level_group = self.station_level_groups[i]
+                    level_text = self.station_level_text_layers[i]
+                    level_text_ref = self.station_levels_base_text_references[i]
+                    requirement_group = self.station_requirement_groups[i]
+                    pt_group = self.station_pt_groups[i]
+
+                    sized = self.adjust_textbox_for_font_size(
+                        base_text_layer=level_text,
+                        base_textbox_reference=textbox_ref,
+                        base_text_wrap_reference=level_text_ref,
+                        divider_layer=None,
+                        oracle_text=details["ability"],
+                        flavor_text=None,
+                    )
+
+                    if sized:
+                        text_layer = sized[0]
+
+                        self.align_center_ys(requirement_group, text_layer)
+                        if "pt" in details:
+                            self.align_center_ys(pt_group, text_layer)
+
+                        adjusted_text_layers.insert(0, text_layer)
+
+                        text_ref = sized[1]
+                        next_ref = (
+                            self.textbox_reference_base.duplicate(
+                                self.textbox_reference_base,
+                                ElementPlacement.PlaceBefore,
+                            )
+                            if i == 0
+                            else self.station_levels_base_text_references[i - 1]
+                        )
+                        temp_shape = create_shape_layer(
+                            (
+                                {"x": 0, "y": text_ref.dims["top"]},
+                                {"x": self.doc_width, "y": text_ref.dims["top"]},
+                                {"x": self.doc_width, "y": self.doc_height},
+                                {"x": 0, "y": self.doc_height},
+                            ),
+                            relative_layer=next_ref,
+                            placement=ElementPlacement.PlaceBefore,
+                        )
+
+                        # Next rules text section needs to be placed on top of this one,
+                        # so we have to adjust it's text reference.
+                        textbox_ref = ReferenceLayer(
+                            merge_shapes(
+                                temp_shape,
+                                next_ref,
+                                operation=ShapeOperation.SubtractFront,
+                            )
+                        )
+                        textbox_ref.visible = False
+                    else:
+                        raise ValueError(
+                            f"Station textbox sizing failed for {level_group.name}"
+                        )
+
+                self.station_level_text_layers = adjusted_text_layers
+
+                # Adjust normal rules text
+                if sized := self.adjust_textbox_for_font_size(
+                    base_text_layer=self.text_layer_rules_base,
+                    base_textbox_reference=textbox_ref,
+                    base_text_wrap_reference=textbox_ref,
+                    divider_layer=None,
+                    oracle_text=self.layout.oracle_text,
+                    flavor_text=None,
+                ):
+                    rules_text, textbox_ref, _ = sized
+                    self.text_layer_rules = rules_text
+                    ref = textbox_ref
+                else:
+                    raise ValueError(
+                        "Station textbox sizing failed for normal rules text"
+                    )
+            else:
+                textboxes_to_adjust: list[TextboxSizingArgs] = [
                     {
-                        "base_text_layer": self.text_layer_rules_adventure,
-                        "base_textbox_reference": self.textbox_reference_adventure_base,
-                        "base_text_wrap_reference": self.text_wrap_reference_adventure_base,
+                        "base_text_layer": self.text_layer_rules_base,
+                        "base_textbox_reference": self.textbox_reference_base,
+                        "base_text_wrap_reference": self.text_wrap_reference_base,
                         "divider_layer": self.divider_layer,
-                        "oracle_text": self.layout.oracle_text_adventure,
-                        "flavor_text": self.layout.flavor_text_adventure,
-                        "height_padding": height_delta,
+                        "oracle_text": self.layout.oracle_text,
+                        "flavor_text": self.layout.flavor_text,
                     }
+                ]
+
+                if (
+                    isinstance(self.layout, AdventureLayout)
+                    and self.text_layer_rules_adventure
+                    and self.textbox_reference_adventure_base
+                    and self.text_wrap_reference_adventure_base
+                ):
+                    # With Adventure cards we need to make sure that
+                    # both left and right rules texts fit
+                    height_delta = self.textbox_reference_adventure_base.dims["height"]
+                    textboxes_to_adjust.append(
+                        {
+                            "base_text_layer": self.text_layer_rules_adventure,
+                            "base_textbox_reference": self.textbox_reference_adventure_base,
+                            "base_text_wrap_reference": self.text_wrap_reference_adventure_base,
+                            "divider_layer": self.divider_layer,
+                            "oracle_text": self.layout.oracle_text_adventure,
+                            "flavor_text": self.layout.flavor_text_adventure,
+                            "height_padding": height_delta,
+                        }
+                    )
+
+                # Adjust textboxes to fit rules text of fixed font size
+                sized_boxes = self.adjust_textboxes_for_font_size(
+                    self.rules_text_font_size, textboxes_to_adjust
                 )
 
-            # Adjust textboxes to fit rules text of fixed font size
-            sized_boxes = self.adjust_textboxes_for_font_size(
-                self.rules_text_font_size, textboxes_to_adjust
-            )
+                rules_text, textbox_ref, _ = sized_boxes[0]
+                self.text_layer_rules = rules_text
+                ref = textbox_ref
 
-            rules_text, textbox_ref, _ = sized_boxes[0]
-            self.text_layer_rules = rules_text
-            ref = textbox_ref
+                if self.is_adventure:
+                    rules_text_left, textbox_ref_left, _ = sized_boxes[1]
 
-            if self.is_adventure:
-                rules_text_left, textbox_ref_left, _ = sized_boxes[1]
-
-                self.text_layer_rules_adventure = rules_text_left
-                self.textbox_reference_adventure = textbox_ref_left
+                    self.text_layer_rules_adventure = rules_text_left
+                    self.textbox_reference_adventure = textbox_ref_left
         elif (
             not self.is_textless
             and self.supports_dynamic_textbox_height
@@ -1332,7 +1441,6 @@ class BorderlessShowcase(
         Adjusts multiple textboxes, whose bottom edges are aligned horizontally,
         to font size so that all the textboxes will end up with the same height.
         """
-        doc_height: float | int = APP.activeDocument.height
 
         # Size the textboxes starting from the one with most characters in its text
         # in the hope that we avoid resizing textboxes that way.
@@ -1358,7 +1466,7 @@ class BorderlessShowcase(
                 oracle_text=arg["oracle_text"],
                 flavor_text=arg["flavor_text"],
                 min_top=min(
-                    arg.get("min_top", doc_height) or doc_height,
+                    arg.get("min_top", self.doc_height) or self.doc_height,
                     tallest_top + height_padding,
                 )
                 or None,
@@ -1520,7 +1628,7 @@ class BorderlessShowcase(
             self.loyalty_group.visible = True
 
     @cached_property
-    def text_layer_methods(self) -> list[Callable[[None], None]]:
+    def text_layer_methods(self) -> list[Callable[[], None]]:
         methods = super().text_layer_methods
         if not self.is_planeswalker:
             methods.remove(self.pw_text_layers)
@@ -1530,7 +1638,7 @@ class BorderlessShowcase(
         return methods
 
     @property
-    def post_text_methods(self) -> list[Callable[[None], None]]:
+    def post_text_methods(self) -> list[Callable[[], None]]:
         methods = super().post_text_methods
         methods.remove(self.pw_ability_mask)
         if self.is_textless:
@@ -2023,7 +2131,7 @@ class BorderlessShowcase(
 
     def post_text_layers_prototype(self) -> None:
         if isinstance(self.layout, PrototypeLayout):
-            if self.text_layer_rules_prototype:
+            if self.text_layer_rules_prototype and self.text_layer_rules:
                 self.text_layer_rules_prototype.textItem.size = (
                     self.text_layer_rules.textItem.size
                 )
@@ -2050,3 +2158,35 @@ class BorderlessShowcase(
             self.prototype_group.translate(0, delta)
 
     # endregion Prototype
+
+    # region Station
+
+    @cached_property
+    def station_levels_base_text_references(self) -> list[ReferenceLayer]:
+        layers: list[ReferenceLayer] = []
+        if isinstance(self.layout, StationLayout):
+            for details, level_group in zip(
+                self.layout.stations, self.station_level_groups
+            ):
+                if layer := get_reference_layer(
+                    LAYER_NAMES.TEXT_REFERENCE_CREATURE
+                    if "pt" in details
+                    else LAYER_NAMES.TEXT_REFERENCE,
+                    level_group,
+                ):
+                    layers.append(layer)
+        return layers
+
+    def frame_layers_station(self) -> None:
+        super().frame_layers_station()
+
+        for group_list in (self.station_requirement_groups, self.station_pt_groups):
+            for group in group_list:
+                if layer := getLayer(LAYERS.PINLINES, group):
+                    self.generate_layer(group=layer, colors=self.pinlines_colors)
+
+    def layer_positioning_station(self) -> None:
+        if not self.rules_text_font_size:
+            return super().layer_positioning_station()
+
+    # endregion Station

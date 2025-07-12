@@ -41,6 +41,7 @@ borderless-showcase.psd:
         - class
         - battle
         - prototype
+        - station
 
 borderless-showcase-split.psd:
   name: "Borderless Showcase"
