@@ -11,7 +11,7 @@ from src import APP, CFG
 from src._state import PATH
 from src.helpers.document import save_document_psd
 from src.helpers.layers import getLayer
-from src.helpers.masks import copy_layer_mask
+from src.helpers.masks import apply_mask_to_layer_fx, copy_layer_mask
 from src.templates._core import BaseTemplate
 from src.utils.adobe import ReferenceLayer
 
@@ -206,6 +206,7 @@ class BackupAndRestore(BaseTemplate):
                         APP.activeDocument = template_doc
                         copy_layer_mask(temp_layer, layer)
                         temp_layer.remove()
+                        apply_mask_to_layer_fx(layer)
 
             backup_doc.close()
             APP.activeDocument = template_doc
