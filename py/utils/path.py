@@ -9,9 +9,15 @@ from src import APP
 from src.helpers.bounds import LayerBounds, LayerDimensions, get_dimensions_from_bounds
 from src.helpers.colors import get_color, rgb_black
 from src.helpers.layers import select_layer, select_layers
+from src.helpers.selection import (
+    check_selection_bounds,
+    select_bounds,
+    select_overlapping,
+)
 from src.schema.colors import ColorObject
 
 from ..uxp.path import PathPointConf, create_path
+from .layer_fx import get_stroke_details
 
 sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 
@@ -130,3 +136,19 @@ def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:
     APP.executeAction(cID("Mrg2"), desc, DialogModes.DisplayNoDialogs)
 
     return APP.activeDocument.activeLayer
+
+
+def check_layer_overlap_with_shape(layer: ArtLayer, ref: ArtLayer):
+    selection = APP.activeDocument.selection
+    dims = get_shape_dimensions(ref)
+    ref_bounds = (dims["left"], dims["top"], dims["right"], dims["bottom"])
+    select_bounds(ref_bounds, selection=selection)
+
+    if details := get_stroke_details(layer):
+        selection.expand(details["size"])
+
+    select_overlapping(layer)
+    if bounds := check_selection_bounds(selection):
+        selection.deselect()
+        return ref_bounds[1] - bounds[3]
+    return 0

@@ -16,7 +16,6 @@ from src.helpers.bounds import LayerDimensions, get_layer_dimensions
 from src.helpers.colors import GradientConfig, get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
-from src.helpers.position import check_reference_overlap
 from src.helpers.text import (
     get_font_size,
     get_line_count,
@@ -57,8 +56,9 @@ from .helpers import (
     parse_hex_color_list,
 )
 from .utils.layer_fx import get_stroke_details
-from .utils.path import create_shape_layer
+from .utils.path import check_layer_overlap_with_shape, create_shape_layer
 from .utils.text import align_dimension
+from .uxp.path import PathPointConf
 from .uxp.shape import ShapeOperation, merge_shapes
 from .uxp.text import create_text_layer_with_path
 from .vertical_mod import VerticalMod
@@ -642,6 +642,8 @@ class BorderlessShowcase(
                         divider_layer=None,
                         oracle_text=details["ability"],
                         flavor_text=None,
+                        alignment_dimension=None,
+                        vertical_padding=(0, self.rules_text_padding / 2),
                     )
 
                     if sized:
@@ -1241,15 +1243,39 @@ class BorderlessShowcase(
         set_text_size_and_leading(
             layer, self.rules_text_font_size, self.rules_text_font_size
         )
-        text_field = TextField(
+        text_field = FormattedTextField(
             layer=layer,
             contents=oracle_text,
-            flavor=flavor_text,
+            flavor=flavor_text or "",
             divider=divider_layer,
         )
         if not text_field.validate():
             raise ValueError("Rules text layer is invalid.")
         text_field.execute()
+
+    def create_offset_text_shape(
+        self,
+        points: Iterable[PathPointConf],
+        base_text_layer: ArtLayer,
+        color: SolidColor,
+        offset_shape: ArtLayer | None = None,
+    ) -> ArtLayer:
+        offset_shape = offset_shape or self.pt_text_reference
+
+        text_ref_shape = create_shape_layer(
+            points,
+            hide=True,
+        )
+
+        if offset_shape:
+            offset_copy = offset_shape.duplicate(
+                text_ref_shape, ElementPlacement.PlaceBefore
+            )
+            text_ref_shape = merge_shapes(
+                offset_copy, text_ref_shape, operation=ShapeOperation.SubtractFront
+            )
+
+        return create_text_layer_with_path(text_ref_shape, base_text_layer, color=color)
 
     def adjust_textbox_for_font_size(
         self,
@@ -1261,10 +1287,22 @@ class BorderlessShowcase(
         flavor_text: str | None,
         min_top: float | int | None = None,
         align_to: float | int | None = None,
+        alignment_dimension: Literal[
+            "top", "bottom", "left", "right", "center_y", "center_x"
+        ]
+        | None = "center_y",
+        vertical_padding: tuple[float | int, float | int] | None = None,
     ) -> tuple[ArtLayer, ReferenceLayer, float] | None:
         """Calculates the required size for rules textbox when the rules text has a fixed font size."""
-        doc_height: float | int = APP.activeDocument.height
-        min_top = min_top if min_top is not None else doc_height
+        min_top = min_top if min_top is not None else self.doc_height
+        vertical_padding = (
+            vertical_padding
+            if vertical_padding is not None
+            else (self.rules_text_padding / 2, self.rules_text_padding / 2)
+        )
+        # Text formatting might mess with the text's color value,
+        # so the original has to be noted here
+        color = base_text_layer.textItem.color
 
         if align_to is not None:
             top = min_top
@@ -1277,7 +1315,7 @@ class BorderlessShowcase(
             top = min(dims_rules_text["top"], min_top)
 
         dims_wrap_ref = base_text_wrap_reference.dims
-        bottom = doc_height + 500
+        bottom = self.doc_height + 500
         text_ref_shape = create_shape_layer(
             (
                 {"x": dims_wrap_ref["left"], "y": top},
@@ -1291,7 +1329,9 @@ class BorderlessShowcase(
         )
 
         # Assign the text to a shape to make sure that the text wraps consistently
-        shaped_text = create_text_layer_with_path(text_ref_shape, base_text_layer)
+        shaped_text = create_text_layer_with_path(
+            text_ref_shape, base_text_layer, color=color
+        )
         self.format_temp_rules_text(
             shaped_text, divider_layer, oracle_text, flavor_text
         )
@@ -1302,109 +1342,157 @@ class BorderlessShowcase(
             shaped_text,
             reference_dimensions=dims_textbox_ref,
             alignment_dimension="bottom",
-            offset=-self.rules_text_padding,
+            offset=-vertical_padding[1],
         )
 
         # Apply shape to the text that offsets PT elements but allows overflow at bottom
         if self.requires_text_shaping and self.pt_text_reference:
             dims_initial_shape = get_layer_dimensions(shaped_text)
             min_pt_top = (
-                self.pt_reference.dims["top"] if self.pt_reference else doc_height
+                self.pt_reference.dims["top"] if self.pt_reference else self.doc_height
             )
             top = min(
                 dims_initial_shape["top"],
                 min_pt_top,
                 min_top,
             )
-            text_ref_shape = create_shape_layer(
+
+            shaped_text.remove()
+            shaped_text = self.create_offset_text_shape(
                 (
                     {"x": dims_wrap_ref["left"], "y": top},
                     {"x": dims_wrap_ref["right"], "y": top},
                     {"x": dims_wrap_ref["right"], "y": bottom},
                     {"x": dims_wrap_ref["left"], "y": bottom},
                 ),
-                hide=True,
+                base_text_layer,
+                color,
             )
-            pt_ref_copy = self.pt_text_reference.duplicate(
-                text_ref_shape, ElementPlacement.PlaceBefore
-            )
-            text_ref_shape = merge_shapes(
-                pt_ref_copy, text_ref_shape, operation=ShapeOperation.SubtractFront
-            )
-            shaped_text.remove()
-            shaped_text = create_text_layer_with_path(text_ref_shape, base_text_layer)
+
             self.format_temp_rules_text(
                 shaped_text, divider_layer, oracle_text, flavor_text
             )
 
         # Check for overflow after offsetting PT elements
         # and reserve more space for text if necessary.
-        if (
-            self.requires_text_shaping
-            and self.textbox_overflow_reference
-            # and (dims_shaped_text := get_layer_dimensions(shaped_text))
-            # and (
-            #    delta := self.textbox_overflow_reference.dims["top"]
-            #    - dims_shaped_text["bottom"]
-            # )
-            and (
-                delta := check_reference_overlap(
+        if self.requires_text_shaping and self.textbox_overflow_reference:
+            if (
+                (dims_shaped_text := get_layer_dimensions(shaped_text))
+                and (
+                    delta := self.textbox_overflow_reference.dims["top"]
+                    - dims_shaped_text["bottom"]
+                )
+                # and (
+                #     delta := check_reference_overlap(
+                #         shaped_text,
+                #         self.textbox_overflow_reference.bounds,
+                #         docsel=APP.activeDocument.selection,
+                #     )
+                # )
+                < 0
+            ):
+                top += delta - vertical_padding[1]
+
+                shaped_text.remove()
+                shaped_text = self.create_offset_text_shape(
+                    (
+                        {"x": dims_wrap_ref["left"], "y": top},
+                        {"x": dims_wrap_ref["right"], "y": top},
+                        {"x": dims_wrap_ref["right"], "y": bottom},
+                        {"x": dims_wrap_ref["left"], "y": bottom},
+                    ),
+                    base_text_layer,
+                    color,
+                )
+                self.format_temp_rules_text(
+                    shaped_text, divider_layer, oracle_text, flavor_text
+                )
+
+                dims_text_ref_shape = get_layer_dimensions(shaped_text)
+                align_y = dims_text_ref_shape["top"] + (
+                    (
+                        dims_textbox_ref["bottom"]
+                        - dims_text_ref_shape["top"]
+                        - vertical_padding[0]
+                    )
+                    / 2
+                )
+
+                mock_dims: LayerDimensions = {
+                    **dims_textbox_ref,
+                    "center_y": align_y,
+                }
+                # Align text vertically
+                align_dimension(
                     shaped_text,
-                    self.textbox_overflow_reference.bounds,
-                    docsel=APP.activeDocument.selection,
-                )
-            )
-            < 0
-        ):
-            top += delta
-            text_ref_shape = create_shape_layer(
-                (
-                    {"x": dims_wrap_ref["left"], "y": top},
-                    {"x": dims_wrap_ref["right"], "y": top},
-                    {"x": dims_wrap_ref["right"], "y": bottom},
-                    {"x": dims_wrap_ref["left"], "y": bottom},
-                ),
-                hide=True,
-            )
-
-            if self.pt_text_reference:
-                pt_ref_copy = self.pt_text_reference.duplicate(
-                    text_ref_shape, ElementPlacement.PlaceBefore
-                )
-                text_ref_shape = merge_shapes(
-                    pt_ref_copy, text_ref_shape, operation=ShapeOperation.SubtractFront
+                    reference_dimensions=mock_dims,
+                    alignment_dimension="center_y",
                 )
 
-            shaped_text.remove()
-            shaped_text = create_text_layer_with_path(text_ref_shape, base_text_layer)
-            self.format_temp_rules_text(
-                shaped_text, divider_layer, oracle_text, flavor_text
-            )
+                # Text might overlap with the PT box after alignment
+                if (
+                    self.pt_text_reference
+                    and (
+                        delta := check_layer_overlap_with_shape(
+                            shaped_text, self.pt_text_reference
+                        )
+                    )
+                    < 0
+                ):
+                    dims_text_ref_shape = get_layer_dimensions(shaped_text)
+
+                    top = dims_text_ref_shape["top"] - delta - vertical_padding[1]
+
+                    shaped_text.remove()
+                    shaped_text = self.create_offset_text_shape(
+                        (
+                            {"x": dims_wrap_ref["left"], "y": top},
+                            {"x": dims_wrap_ref["right"], "y": top},
+                            {"x": dims_wrap_ref["right"], "y": bottom},
+                            {"x": dims_wrap_ref["left"], "y": bottom},
+                        ),
+                        base_text_layer,
+                        color,
+                    )
+                    self.format_temp_rules_text(
+                        shaped_text, divider_layer, oracle_text, flavor_text
+                    )
+
+            # Further alignment is unnecessary, unless a specific alignment point has been given
+            alignment_dimension = None
 
         dims_text_ref_shape = get_layer_dimensions(shaped_text)
         align_y = (
             align_to
             if align_to is not None
             else dims_text_ref_shape["top"]
-            + ((dims_textbox_ref["bottom"] - dims_text_ref_shape["top"]) / 2)
+            + (
+                (
+                    dims_textbox_ref["bottom"]
+                    - dims_text_ref_shape["top"]
+                    - vertical_padding[0]
+                )
+                / 2
+            )
         )
-        mock_dims: LayerDimensions = {
-            **dims_textbox_ref,
-            "center_y": align_y,
-        }
 
-        # Center text vertically
-        align_dimension(
-            shaped_text,
-            reference_dimensions=mock_dims,
-            alignment_dimension="center_y",
-        )
+        if align_to is not None or alignment_dimension:
+            mock_dims: LayerDimensions = {
+                **dims_textbox_ref,
+                "center_y": align_y,
+            }
+            # Align text
+            align_dimension(
+                shaped_text,
+                reference_dimensions=mock_dims,
+                alignment_dimension=alignment_dimension or "center_y",
+            )
 
         base_text_layer.visible = False
         top_ref = (
             min_top
             if align_to is not None
-            else get_layer_dimensions(shaped_text)["top"] - self.rules_text_padding / 2
+            else get_layer_dimensions(shaped_text)["top"] - vertical_padding[0]
         )
         return (
             shaped_text,
@@ -1540,25 +1628,30 @@ class BorderlessShowcase(
         super().rules_text_and_pt_layers()
 
         if self.supports_dynamic_textbox_height:
-            for entry in self.text:
-                if (
-                    isinstance(entry, FormattedTextArea)
-                    and entry.layer is self.text_layer_rules
-                ):
-                    if self.rules_text_font_size and self.text_layer_rules:
-                        # Ensure that rules text font size won't be adjusted
-                        self.disable_text_area_scaling(entry)
-                    elif entry.reference_dims and (
-                        stroke_details := get_stroke_details(entry.layer)
+            if self.rules_text_font_size:
+                # Filter out rules text formatting as it has been done already
+                self.text = [
+                    entry
+                    for entry in self.text
+                    if entry and entry.layer is not self.text_layer_rules
+                ]
+            else:
+                for entry in self.text:
+                    if (
+                        isinstance(entry, FormattedTextArea)
+                        and entry.layer is self.text_layer_rules
                     ):
-                        # Add enough padding to offset stroke
-                        # TODO Figure out a cleaner way to do this. Possibly by extending FormattedTextArea?
-                        entry.reference_dims = {
-                            **entry.reference_dims,
-                            "height": entry.reference_dims["height"]
-                            - stroke_details["size"],
-                        }
-                    break
+                        if entry.reference_dims and (
+                            stroke_details := get_stroke_details(entry.layer)
+                        ):
+                            # Add enough padding to offset stroke
+                            # TODO Figure out a cleaner way to do this. Possibly by extending FormattedTextArea?
+                            entry.reference_dims = {
+                                **entry.reference_dims,
+                                "height": entry.reference_dims["height"]
+                                - stroke_details["size"],
+                            }
+                        break
 
         if isinstance(self.layout, BattleLayout):
             for entry in self.text:
@@ -2176,6 +2269,22 @@ class BorderlessShowcase(
                 ):
                     layers.append(layer)
         return layers
+
+    def text_layers_station(self) -> None:
+        if self.rules_text_font_size:
+            if isinstance(self.layout, StationLayout):
+                for details, requirement, pt in zip(
+                    self.layout.stations,
+                    self.station_requirement_text_layers,
+                    self.station_pt_text_layers,
+                ):
+                    requirement.textItem.contents = details["requirement"]
+                    if "pt" in details:
+                        pt.textItem.contents = (
+                            f"{details['pt']['power']}/{details['pt']['toughness']}"
+                        )
+        else:
+            return super().text_layers_station()
 
     def frame_layers_station(self) -> None:
         super().frame_layers_station()

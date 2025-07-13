@@ -1,6 +1,7 @@
 from _ctypes import COMError
 from typing import Any, Literal, NotRequired, TypedDict
 
+from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api.enumerations import PointKind, AutoKernType
 
@@ -151,7 +152,7 @@ class MakeTextLayerActionDescriptor(ActionDescriptor):
 # leftDirection -> forward
 # rightDirection -> backward
 def create_text_layer_with_path(
-    reference_path: ArtLayer, reference_text: ArtLayer
+    reference_path: ArtLayer, reference_text: ArtLayer, color: SolidColor | None = None
 ) -> ArtLayer:
     """Creates a shaped text layer, which aims to mimic the properties of reference_text layer."""
     select_layer(reference_path, make_visible=True)
@@ -207,6 +208,7 @@ def create_text_layer_with_path(
     reference_path.visible = False
 
     ref_text = reference_text.textItem
+    color = color if color else ref_text.color
     desc: MakeTextLayerActionDescriptor = {
         "_obj": "make",
         "_target": [{"_ref": "textLayer"}],
@@ -222,9 +224,9 @@ def create_text_layer_with_path(
                         "_obj": "textStyle",
                         "color": {
                             "_obj": "RGBColor",
-                            "blue": ref_text.color.rgb.blue,
-                            "grain": ref_text.color.rgb.green,
-                            "red": ref_text.color.rgb.red,
+                            "blue": color.rgb.blue,
+                            "grain": color.rgb.green,
+                            "red": color.rgb.red,
                         },
                         "fontPostScriptName": ref_text.font,
                         "size": {
