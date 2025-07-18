@@ -7,12 +7,16 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
-from src import APP, CFG
+from src import CFG
 from src.cards import strip_reminder_text
 from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
 from src.enums.settings import BorderlessTextbox
-from src.helpers.bounds import LayerDimensions, get_layer_dimensions
+from src.helpers.bounds import (
+    LayerDimensions,
+    get_group_dimensions,
+    get_layer_dimensions,
+)
 from src.helpers.colors import GradientConfig, get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
@@ -635,6 +639,8 @@ class BorderlessShowcase(
                     requirement_group = self.station_requirement_groups[i]
                     pt_group = self.station_pt_groups[i]
 
+                    dims_req_group = get_group_dimensions(requirement_group)
+
                     sized = self.adjust_textbox_for_font_size(
                         base_text_layer=level_text,
                         base_textbox_reference=textbox_ref,
@@ -642,6 +648,9 @@ class BorderlessShowcase(
                         divider_layer=None,
                         oracle_text=details["ability"],
                         flavor_text=None,
+                        min_top=textbox_ref.dims["bottom"]
+                        - dims_req_group["height"]
+                        - self.rules_text_padding,
                         alignment_dimension=None,
                         vertical_padding=(0, self.rules_text_padding / 2),
                     )
@@ -656,6 +665,8 @@ class BorderlessShowcase(
                         adjusted_text_layers.insert(0, text_layer)
 
                         text_ref = sized[1]
+                        dims_req_group = get_group_dimensions(requirement_group)
+                        next_bottom = min(text_ref.dims["top"], dims_req_group["top"])
                         next_ref = (
                             self.textbox_reference_base.duplicate(
                                 self.textbox_reference_base,
@@ -666,8 +677,8 @@ class BorderlessShowcase(
                         )
                         temp_shape = create_shape_layer(
                             (
-                                {"x": 0, "y": text_ref.dims["top"]},
-                                {"x": self.doc_width, "y": text_ref.dims["top"]},
+                                {"x": 0, "y": next_bottom},
+                                {"x": self.doc_width, "y": next_bottom},
                                 {"x": self.doc_width, "y": self.doc_height},
                                 {"x": 0, "y": self.doc_height},
                             ),
@@ -701,7 +712,7 @@ class BorderlessShowcase(
                     oracle_text=self.layout.oracle_text,
                     flavor_text=None,
                 ):
-                    rules_text, textbox_ref, _ = sized
+                    rules_text, textbox_ref = sized
                     self.text_layer_rules = rules_text
                     ref = textbox_ref
                 else:
@@ -746,12 +757,12 @@ class BorderlessShowcase(
                     self.rules_text_font_size, textboxes_to_adjust
                 )
 
-                rules_text, textbox_ref, _ = sized_boxes[0]
+                rules_text, textbox_ref = sized_boxes[0]
                 self.text_layer_rules = rules_text
                 ref = textbox_ref
 
                 if self.is_adventure:
-                    rules_text_left, textbox_ref_left, _ = sized_boxes[1]
+                    rules_text_left, textbox_ref_left = sized_boxes[1]
 
                     self.text_layer_rules_adventure = rules_text_left
                     self.textbox_reference_adventure = textbox_ref_left
@@ -905,7 +916,7 @@ class BorderlessShowcase(
     def twins_horizontal_delta(self) -> float | int:
         if self.name_normal_pinline_shape:
             dims = get_layer_dimensions(self.name_normal_pinline_shape)
-            return APP.activeDocument.width - 2 * dims["center_x"]
+            return self.doc_width - 2 * dims["center_x"]
         return 0
 
     @cached_property
@@ -1292,7 +1303,7 @@ class BorderlessShowcase(
         ]
         | None = "center_y",
         vertical_padding: tuple[float | int, float | int] | None = None,
-    ) -> tuple[ArtLayer, ReferenceLayer, float] | None:
+    ) -> tuple[ArtLayer, ReferenceLayer] | None:
         """Calculates the required size for rules textbox when the rules text has a fixed font size."""
         min_top = min_top if min_top is not None else self.doc_height
         vertical_padding = (
@@ -1345,6 +1356,11 @@ class BorderlessShowcase(
             offset=-vertical_padding[1],
         )
 
+        dims_shaped_text = get_layer_dimensions(shaped_text)
+        if align_to is None and (delta := min_top - dims_shaped_text["top"]) < 0:
+            shaped_text.translate(0, delta)
+            alignment_dimension = "center_y"
+
         # Apply shape to the text that offsets PT elements but allows overflow at bottom
         if self.requires_text_shaping and self.pt_text_reference:
             dims_initial_shape = get_layer_dimensions(shaped_text)
@@ -1386,7 +1402,7 @@ class BorderlessShowcase(
                 #     delta := check_reference_overlap(
                 #         shaped_text,
                 #         self.textbox_overflow_reference.bounds,
-                #         docsel=APP.activeDocument.selection,
+                #         docsel=self.docref.selection,
                 #     )
                 # )
                 < 0
@@ -1462,18 +1478,17 @@ class BorderlessShowcase(
             alignment_dimension = None
 
         dims_text_ref_shape = get_layer_dimensions(shaped_text)
+        # Take padding into account when centering text
+        chosen_top_a, chosen_top_b = (
+            (dims_text_ref_shape["top"], calculated_top)
+            if (calculated_top := dims_text_ref_shape["top"] + vertical_padding[0])
+            < min_top
+            else (min_top, min_top)
+        )
         align_y = (
             align_to
             if align_to is not None
-            else dims_text_ref_shape["top"]
-            + (
-                (
-                    dims_textbox_ref["bottom"]
-                    - dims_text_ref_shape["top"]
-                    - vertical_padding[0]
-                )
-                / 2
-            )
+            else chosen_top_a + ((dims_textbox_ref["bottom"] - chosen_top_b) / 2)
         )
 
         if align_to is not None or alignment_dimension:
@@ -1519,12 +1534,11 @@ class BorderlessShowcase(
                     hide=True,
                 )
             ),
-            align_y,
         )
 
     def adjust_textboxes_for_font_size(
         self, font_size: int | float, textbox_args: list[TextboxSizingArgs]
-    ) -> list[tuple[ArtLayer, ReferenceLayer, float]]:
+    ) -> list[tuple[ArtLayer, ReferenceLayer]]:
         """
         Adjusts multiple textboxes, whose bottom edges are aligned horizontally,
         to font size so that all the textboxes will end up with the same height.
@@ -1538,10 +1552,9 @@ class BorderlessShowcase(
             reverse=True,
         )
 
-        sizes: list[tuple[ArtLayer, ReferenceLayer, float]] = []
-        tallest_top: float | int = 0
+        sizes: list[tuple[ArtLayer, ReferenceLayer]] = []
+        tallest_top: float | int = self.doc_height
         tallest_height: float | int = 0
-        tallest_align: float = 0
         tallest_idx: int = -1
         # First pass of sizing
         for idx, arg in enumerate(textbox_args_sorted):
@@ -1570,7 +1583,6 @@ class BorderlessShowcase(
                 ) > tallest_height:
                     tallest_top = sized[1].dims["top"] - height_padding
                     tallest_height = height
-                    tallest_align = sized[2]
                     tallest_idx = idx
             else:
                 raise ValueError(
@@ -1578,7 +1590,7 @@ class BorderlessShowcase(
                 )
 
         # Resize all shorter layers to match the tallest
-        for idx, ((layer, ref, _), arg) in enumerate(
+        for idx, ((layer, ref), arg) in enumerate(
             zip(sizes.copy(), textbox_args_sorted)
         ):
             orig_idx = textbox_args.index(arg)
@@ -1590,6 +1602,7 @@ class BorderlessShowcase(
             height_padding = arg.get("height_padding", 0) or 0
             layer.remove()
             ref.remove()
+            min_top = tallest_top + height_padding
             sized = self.adjust_textbox_for_font_size(
                 base_text_layer=arg["base_text_layer"],
                 base_textbox_reference=arg["base_textbox_reference"],
@@ -1597,8 +1610,8 @@ class BorderlessShowcase(
                 divider_layer=arg["divider_layer"],
                 oracle_text=arg["oracle_text"],
                 flavor_text=arg["flavor_text"],
-                min_top=tallest_top + height_padding,
-                align_to=tallest_align,
+                min_top=min_top,
+                align_to=min_top + (tallest_height - height_padding) / 2,
             )
             if sized:
                 sizes[orig_idx] = sized
@@ -1916,7 +1929,7 @@ class BorderlessShowcase(
         if (layer_a := layers[0]) and (layer_b := layers[1]):
             dims_a = get_layer_dimensions(layer_a)
             dims_b = get_layer_dimensions(layer_b)
-            half_doc_width: float | int = APP.activeDocument.width / 2
+            half_doc_width: float | int = self.doc_width / 2
             delta = half_doc_width - (dims_b["left"] - half_doc_width) - dims_a["right"]
             for layer in layers:
                 if layer:
@@ -1949,7 +1962,7 @@ class BorderlessShowcase(
             ) and self.flip_twins:
                 flip_layer(layer, FlipDirection.Horizontal)
                 dims = get_layer_dimensions(layer)
-                layer.translate(APP.activeDocument.width - 2 * dims["center_x"], 0)
+                layer.translate(self.doc_width - 2 * dims["center_x"], 0)
 
             return [layer]
 
@@ -2108,8 +2121,8 @@ class BorderlessShowcase(
                 self.rules_text_font_size, args
             )
 
-            self.text_layers_rules = [layer for layer, _, _ in sized_boxes]
-            self.textbox_references = [ref for _, ref, _ in sized_boxes]
+            self.text_layers_rules = [layer for layer, _ in sized_boxes]
+            self.textbox_references = [ref for _, ref in sized_boxes]
 
     # endregion Split
 
