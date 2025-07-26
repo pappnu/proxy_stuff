@@ -531,6 +531,12 @@ class BorderlessShowcase(
     def pinlines_shape_group(self) -> LayerSet | None:
         return getLayerSet(LAYERS.SHAPE, self.pinlines_group)
 
+    @cached_property
+    def mdfc_front_bottom_group(self) -> LayerSet | None:
+        return getLayerSet(
+            LAYERS.BOTTOM, [self.text_group, f"{LAYERS.MDFC} {LAYERS.FRONT}"]
+        )
+
     # endregion Groups
 
     # region Reference Layers
@@ -589,9 +595,9 @@ class BorderlessShowcase(
     def textbox_overflow_reference(self) -> ReferenceLayer | None:
         """Text is not allowed to go below the top dimension of this shape."""
         ref = getLayer(LAYER_NAMES.OVERFLOW_REFERENCE, self.textbox_reference_group)
-        if self.is_mdfc and ref and self.mdfc_front_bottom_shape:
+        if self.is_mdfc and ref and self.mdfc_front_bottom_group:
             dims_mdfc = get_layer_dimensions_via_rasterization(
-                self.mdfc_front_bottom_shape
+                self.mdfc_front_bottom_group
             )
             dims_ref = get_layer_dimensions(ref)
             ref.translate(0, dims_mdfc["top"] - dims_ref["top"])
@@ -995,13 +1001,6 @@ class BorderlessShowcase(
 
     def enable_crown(self) -> None:
         pass
-
-    @cached_property
-    def mdfc_front_bottom_shape(self) -> ArtLayer | None:
-        return getLayer(
-            LAYERS.SHAPE,
-            [self.text_group, f"{LAYERS.MDFC} {LAYERS.FRONT}", LAYERS.BOTTOM],
-        )
 
     @cached_property
     def enabled_shapes(self) -> list[ArtLayer | LayerSet | None]:
