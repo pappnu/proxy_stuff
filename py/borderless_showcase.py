@@ -59,6 +59,7 @@ from .helpers import (
     is_color_identity,
     parse_hex_color_list,
 )
+from .utils.layer import get_layer_dimensions_via_rasterization
 from .utils.layer_fx import get_stroke_details
 from .utils.path import check_layer_overlap_with_shape, create_shape_layer
 from .utils.text import align_dimension
@@ -589,7 +590,9 @@ class BorderlessShowcase(
         """Text is not allowed to go below the top dimension of this shape."""
         ref = getLayer(LAYER_NAMES.OVERFLOW_REFERENCE, self.textbox_reference_group)
         if self.is_mdfc and ref and self.mdfc_front_bottom_shape:
-            dims_mdfc = get_layer_dimensions(self.mdfc_front_bottom_shape)
+            dims_mdfc = get_layer_dimensions_via_rasterization(
+                self.mdfc_front_bottom_shape
+            )
             dims_ref = get_layer_dimensions(ref)
             ref.translate(0, dims_mdfc["top"] - dims_ref["top"])
             ref.visible = False
@@ -619,7 +622,6 @@ class BorderlessShowcase(
             and self.rules_text_font_size
             and self.text_layer_rules_base
             and self.textbox_reference_base
-            and self.text_wrap_reference_base
         ):
             if isinstance(self.layout, StationLayout):
                 if self.station_group:
@@ -724,7 +726,7 @@ class BorderlessShowcase(
                     {
                         "base_text_layer": self.text_layer_rules_base,
                         "base_textbox_reference": self.textbox_reference_base,
-                        "base_text_wrap_reference": self.text_wrap_reference_base,
+                        "base_text_wrap_reference": self.textbox_reference_base,
                         "divider_layer": self.divider_layer,
                         "oracle_text": self.layout.oracle_text,
                         "flavor_text": self.layout.flavor_text,
@@ -735,7 +737,6 @@ class BorderlessShowcase(
                     isinstance(self.layout, AdventureLayout)
                     and self.text_layer_rules_adventure
                     and self.textbox_reference_adventure_base
-                    and self.text_wrap_reference_adventure_base
                 ):
                     # With Adventure cards we need to make sure that
                     # both left and right rules texts fit
@@ -744,7 +745,7 @@ class BorderlessShowcase(
                         {
                             "base_text_layer": self.text_layer_rules_adventure,
                             "base_textbox_reference": self.textbox_reference_adventure_base,
-                            "base_text_wrap_reference": self.text_wrap_reference_adventure_base,
+                            "base_text_wrap_reference": self.textbox_reference_adventure_base,
                             "divider_layer": self.divider_layer,
                             "oracle_text": self.layout.oracle_text_adventure,
                             "flavor_text": self.layout.flavor_text_adventure,
@@ -1061,39 +1062,6 @@ class BorderlessShowcase(
         return f"{LAYERS.RULES_TEXT}{f' - {LAYERS.ADVENTURE} {LAYERS.RIGHT}' if self.is_adventure else ''}"
 
     @cached_property
-    def text_wrap_reference_base(self) -> ReferenceLayer | None:
-        return get_reference_layer(
-            f"{LAYER_NAMES.TEXT_REFERENCE}{f' - {LAYERS.ADVENTURE} {LAYERS.RIGHT}' if self.is_adventure else ''}",
-            self.rules_text_group,
-        )
-
-    @cached_property
-    def text_wrap_reference_adventure_base(self) -> ReferenceLayer | None:
-        return get_reference_layer(
-            f"{LAYER_NAMES.TEXT_REFERENCE}{f' - {LAYERS.ADVENTURE} {LAYERS.LEFT}' if self.is_adventure else ''}",
-            self.rules_text_group,
-        )
-
-    @cached_property
-    def text_wrap_reference(self) -> ReferenceLayer | None:
-        if self.textbox_reference and (self.text_wrap_reference_base):
-            dims_textbox_ref = self.textbox_reference.dims
-            dims_base = self.text_wrap_reference_base.dims
-            return ReferenceLayer(
-                create_shape_layer(
-                    [
-                        {"x": dims_base["left"], "y": dims_textbox_ref["top"]},
-                        {"x": dims_base["right"], "y": dims_textbox_ref["top"]},
-                        {"x": dims_base["right"], "y": dims_textbox_ref["bottom"]},
-                        {"x": dims_base["left"], "y": dims_textbox_ref["bottom"]},
-                    ],
-                    relative_layer=self.text_wrap_reference_base,
-                    placement=ElementPlacement.PlaceBefore,
-                    hide=True,
-                )
-            )
-
-    @cached_property
     def text_layer_rules_base(self) -> ArtLayer | None:
         return getLayer(
             self.text_layer_rules_name,
@@ -1120,13 +1088,15 @@ class BorderlessShowcase(
             and (self.is_creature or self.has_flipside_pt)
             and layer
             and self.pt_text_reference
-            and self.text_wrap_reference
         ):
+            textbox_ref_copy = self.textbox_reference_base.duplicate(
+                self.textbox_reference_base, ElementPlacement.PlaceBefore
+            )
             textbox_ref_shape = merge_shapes(
                 self.pt_text_reference.duplicate(
-                    self.text_wrap_reference, ElementPlacement.PlaceBefore
+                    textbox_ref_copy, ElementPlacement.PlaceBefore
                 ),
-                self.text_wrap_reference,
+                textbox_ref_copy,
                 operation=ShapeOperation.SubtractFront,
             )
             textbox_ref_shape = merge_shapes(
@@ -1311,6 +1281,11 @@ class BorderlessShowcase(
             if vertical_padding is not None
             else (self.rules_text_padding / 2, self.rules_text_padding / 2)
         )
+        stroke_size = (
+            stroke_details["size"]
+            if (stroke_details := get_stroke_details(base_text_layer))
+            else 0
+        )
         # Text formatting might mess with the text's color value,
         # so the original has to be noted here
         color = base_text_layer.textItem.color
@@ -1322,15 +1297,15 @@ class BorderlessShowcase(
             self.format_temp_rules_text(
                 base_text_layer, divider_layer, oracle_text, flavor_text
             )
-            dims_rules_text = get_layer_dimensions(base_text_layer)
+            dims_rules_text = get_layer_dimensions_via_rasterization(base_text_layer)
             top = min(dims_rules_text["top"], min_top)
 
         dims_wrap_ref = base_text_wrap_reference.dims
         bottom = self.doc_height + 500
         text_ref_shape = create_shape_layer(
             (
-                {"x": dims_wrap_ref["left"], "y": top},
-                {"x": dims_wrap_ref["right"], "y": top},
+                {"x": dims_wrap_ref["left"], "y": top + stroke_size},
+                {"x": dims_wrap_ref["right"], "y": top + stroke_size},
                 {"x": dims_wrap_ref["right"], "y": bottom},
                 {"x": dims_wrap_ref["left"], "y": bottom},
             ),
@@ -1356,14 +1331,17 @@ class BorderlessShowcase(
             offset=-vertical_padding[1],
         )
 
-        dims_shaped_text = get_layer_dimensions(shaped_text)
-        if align_to is None and (delta := min_top - dims_shaped_text["top"]) < 0:
+        dims_shaped_text = get_layer_dimensions_via_rasterization(shaped_text)
+        if (
+            align_to is None
+            and (delta := min_top + vertical_padding[0] - dims_shaped_text["top"]) < 0
+        ):
             shaped_text.translate(0, delta)
             alignment_dimension = "center_y"
 
         # Apply shape to the text that offsets PT elements but allows overflow at bottom
         if self.requires_text_shaping and self.pt_text_reference:
-            dims_initial_shape = get_layer_dimensions(shaped_text)
+            dims_initial_shape = get_layer_dimensions_via_rasterization(shaped_text)
             min_pt_top = (
                 self.pt_reference.dims["top"] if self.pt_reference else self.doc_height
             )
@@ -1376,8 +1354,8 @@ class BorderlessShowcase(
             shaped_text.remove()
             shaped_text = self.create_offset_text_shape(
                 (
-                    {"x": dims_wrap_ref["left"], "y": top},
-                    {"x": dims_wrap_ref["right"], "y": top},
+                    {"x": dims_wrap_ref["left"], "y": top + stroke_size},
+                    {"x": dims_wrap_ref["right"], "y": top + stroke_size},
                     {"x": dims_wrap_ref["right"], "y": bottom},
                     {"x": dims_wrap_ref["left"], "y": bottom},
                 ),
@@ -1393,7 +1371,11 @@ class BorderlessShowcase(
         # and reserve more space for text if necessary.
         if self.requires_text_shaping and self.textbox_overflow_reference:
             if (
-                (dims_shaped_text := get_layer_dimensions(shaped_text))
+                (
+                    dims_shaped_text := get_layer_dimensions_via_rasterization(
+                        shaped_text
+                    )
+                )
                 and (
                     delta := self.textbox_overflow_reference.dims["top"]
                     - dims_shaped_text["bottom"]
@@ -1407,13 +1389,13 @@ class BorderlessShowcase(
                 # )
                 < 0
             ):
-                top += delta - vertical_padding[1]
+                top = dims_shaped_text["top"] + delta - vertical_padding[1]
 
                 shaped_text.remove()
                 shaped_text = self.create_offset_text_shape(
                     (
-                        {"x": dims_wrap_ref["left"], "y": top},
-                        {"x": dims_wrap_ref["right"], "y": top},
+                        {"x": dims_wrap_ref["left"], "y": top + stroke_size},
+                        {"x": dims_wrap_ref["right"], "y": top + stroke_size},
                         {"x": dims_wrap_ref["right"], "y": bottom},
                         {"x": dims_wrap_ref["left"], "y": bottom},
                     ),
@@ -1424,25 +1406,28 @@ class BorderlessShowcase(
                     shaped_text, divider_layer, oracle_text, flavor_text
                 )
 
-                dims_text_ref_shape = get_layer_dimensions(shaped_text)
-                align_y = dims_text_ref_shape["top"] + (
+                dims_text_ref_shape = get_layer_dimensions_via_rasterization(
+                    shaped_text
+                )
+                align_bottom = ceil(
                     (
-                        dims_textbox_ref["bottom"]
-                        - dims_text_ref_shape["top"]
-                        - vertical_padding[0]
+                        min(
+                            self.textbox_overflow_reference.dims["top"],
+                            dims_textbox_ref["bottom"],
+                        )
+                        - vertical_padding[1]
                     )
-                    / 2
                 )
 
                 mock_dims: LayerDimensions = {
                     **dims_textbox_ref,
-                    "center_y": align_y,
+                    "bottom": align_bottom,
                 }
                 # Align text vertically
                 align_dimension(
                     shaped_text,
                     reference_dimensions=mock_dims,
-                    alignment_dimension="center_y",
+                    alignment_dimension="bottom",
                 )
 
                 # Text might overlap with the PT box after alignment
@@ -1455,15 +1440,17 @@ class BorderlessShowcase(
                     )
                     < 0
                 ):
-                    dims_text_ref_shape = get_layer_dimensions(shaped_text)
+                    dims_text_ref_shape = get_layer_dimensions_via_rasterization(
+                        shaped_text
+                    )
 
                     top = dims_text_ref_shape["top"] - delta - vertical_padding[1]
 
                     shaped_text.remove()
                     shaped_text = self.create_offset_text_shape(
                         (
-                            {"x": dims_wrap_ref["left"], "y": top},
-                            {"x": dims_wrap_ref["right"], "y": top},
+                            {"x": dims_wrap_ref["left"], "y": top + stroke_size},
+                            {"x": dims_wrap_ref["right"], "y": top + stroke_size},
                             {"x": dims_wrap_ref["right"], "y": bottom},
                             {"x": dims_wrap_ref["left"], "y": bottom},
                         ),
@@ -1474,21 +1461,36 @@ class BorderlessShowcase(
                         shaped_text, divider_layer, oracle_text, flavor_text
                     )
 
-            # Further alignment is unnecessary, unless a specific alignment point has been given
-            alignment_dimension = None
+                # Further alignment is unnecessary, unless a specific alignment point has been given
+                alignment_dimension = None
 
-        dims_text_ref_shape = get_layer_dimensions(shaped_text)
+        dims_text_ref_shape = get_layer_dimensions_via_rasterization(shaped_text)
         # Take padding into account when centering text
-        chosen_top_a, chosen_top_b = (
-            (dims_text_ref_shape["top"], calculated_top)
-            if (calculated_top := dims_text_ref_shape["top"] + vertical_padding[0])
-            < min_top
-            else (min_top, min_top)
+        chosen_top = (
+            dims_text_ref_shape["top"]
+            if dims_text_ref_shape["top"] < min_top
+            else min_top
         )
-        align_y = (
-            align_to
-            if align_to is not None
-            else chosen_top_a + ((dims_textbox_ref["bottom"] - chosen_top_b) / 2)
+        align_y = ceil(
+            (
+                align_to
+                if align_to is not None
+                else chosen_top
+                + (
+                    (
+                        dims_textbox_ref["bottom"]
+                        - (
+                            # If there's plenty of space, ignore padding
+                            vertical_padding[1]
+                            if dims_text_ref_shape["height"] + sum(vertical_padding)
+                            > dims_textbox_ref["bottom"] - min_top
+                            else 0
+                        )
+                        - chosen_top
+                    )
+                    / 2
+                )
+            )
         )
 
         if align_to is not None or alignment_dimension:
@@ -1507,7 +1509,8 @@ class BorderlessShowcase(
         top_ref = (
             min_top
             if align_to is not None
-            else get_layer_dimensions(shaped_text)["top"] - vertical_padding[0]
+            else get_layer_dimensions_via_rasterization(shaped_text)["top"]
+            - vertical_padding[0]
         )
         return (
             shaped_text,
@@ -2036,15 +2039,6 @@ class BorderlessShowcase(
         return refs
 
     @cached_property
-    def text_wrap_references(self) -> list[ReferenceLayer | None]:
-        return [
-            get_reference_layer(
-                f"{LAYER_NAMES.TEXT_REFERENCE} {side}", self.rules_text_group
-            )
-            for side in self.sides
-        ]
-
-    @cached_property
     def expansion_references(self) -> list[ReferenceLayer | None]:
         return [
             get_reference_layer(f"{LAYERS.EXPANSION_REFERENCE} {side}", self.text_group)
@@ -2098,9 +2092,8 @@ class BorderlessShowcase(
     def adjust_split_textboxes_to_font_size(self):
         if self.rules_text_font_size and isinstance(self.layout, SplitLayout):
             args: list[TextboxSizingArgs] = []
-            for text_layer, text_wrap_ref, textbox_ref, divider, flavor, oracle in zip(
+            for text_layer, textbox_ref, divider, flavor, oracle in zip(
                 self.text_layers_rules,
-                self.text_wrap_references,
                 self.textbox_references,
                 self.rules_text_dividers,
                 self.layout.flavor_texts,
@@ -2110,7 +2103,7 @@ class BorderlessShowcase(
                     args.append(
                         {
                             "base_text_layer": text_layer,
-                            "base_text_wrap_reference": text_wrap_ref,
+                            "base_text_wrap_reference": textbox_ref,
                             "base_textbox_reference": textbox_ref,
                             "divider_layer": divider,
                             "flavor_text": flavor,
@@ -2258,7 +2251,9 @@ class BorderlessShowcase(
             and self.prototype_group
             and self.prototype_pt_box_shape
         ):
-            pt_dims = get_layer_dimensions(self.prototype_pt_box_shape)
+            pt_dims = get_layer_dimensions_via_rasterization(
+                self.prototype_pt_box_shape
+            )
             ref_dims = self.textbox_reference.dims
             delta = ref_dims["top"] - pt_dims["bottom"]
             self.prototype_group.translate(0, delta)

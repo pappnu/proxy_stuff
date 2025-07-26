@@ -245,3 +245,14 @@ def deselect_all_layers() -> None:
     ref.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
     desc.putReference(cID("null"), ref)
     APP.executeAction(sID("selectNoLayers"), desc, NO_DIALOG)
+
+
+def rasterize_layer_style(layer: ArtLayer | LayerSet) -> None:
+    select_layer(layer)
+    idrasterizeLayer = sID("rasterizeLayer")
+    desc = ActionDescriptor()
+    ref = ActionReference()
+    ref.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
+    desc.putReference(cID("null"), ref)
+    desc.putEnumerated(cID("What"), sID("rasterizeItem"), sID("layerStyle"))
+    APP.executeAction(idrasterizeLayer, desc, NO_DIALOG)
