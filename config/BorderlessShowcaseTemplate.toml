@@ -1,3 +1,12 @@
+[ART]
+title = "Art Options"
+
+[ART."Content.Aware.Fill"]
+title = "Content Aware Fill"
+desc = """When enabled, the area not covered by the source image is filled using Content Aware Fill."""
+type = "bool"
+default = 1
+
 [COLORS]
 title = "Color Options"
 

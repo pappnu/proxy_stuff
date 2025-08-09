@@ -118,6 +118,12 @@ class BorderlessShowcase(
     # region Settings
 
     @cached_property
+    def is_content_aware_enabled(self) -> bool:
+        return bool(
+            CFG.get_setting(section="ART", key="Content.Aware.Fill", default=True)
+        )
+
+    @cached_property
     def color_limit(self) -> int:
         setting = CFG.get_setting(
             section="COLORS", key="Max.Colors", default="2", is_bool=False
@@ -447,7 +453,9 @@ class BorderlessShowcase(
 
     @cached_property
     def layers_to_seek_masks_from(self) -> Iterable[ArtLayer | LayerSet | None]:
-        return (self.pinlines_group,)
+        if self.docref:
+            return (*self.docref.layerSets, *self.docref.artLayers)
+        return []
 
     # endregion Backup
 
@@ -1087,23 +1095,25 @@ class BorderlessShowcase(
             and (self.is_creature or self.has_flipside_pt)
             and layer
             and self.pt_text_reference
+            and self.textbox_reference_base
         ):
-            textbox_ref_copy = self.textbox_reference_base.duplicate(
-                self.textbox_reference_base, ElementPlacement.PlaceBefore
+            base_dims = get_layer_dimensions(self.textbox_reference_base)
+            textbox_ref_shape = create_shape_layer(
+                (
+                    {"x": base_dims["left"], "y": base_dims["top"]},
+                    {"x": base_dims["right"], "y": base_dims["top"]},
+                    {"x": base_dims["right"], "y": self.doc_height},
+                    {"x": base_dims["left"], "y": self.doc_height},
+                ),
+                relative_layer=self.textbox_reference_base,
+                placement=ElementPlacement.PlaceBefore,
             )
             textbox_ref_shape = merge_shapes(
                 self.pt_text_reference.duplicate(
-                    textbox_ref_copy, ElementPlacement.PlaceBefore
-                ),
-                textbox_ref_copy,
-                operation=ShapeOperation.SubtractFront,
-            )
-            textbox_ref_shape = merge_shapes(
-                textbox_ref_shape,
-                self.textbox_overflow_reference.duplicate(
                     textbox_ref_shape, ElementPlacement.PlaceBefore
                 ),
-                operation=ShapeOperation.Unite,
+                textbox_ref_shape,
+                operation=ShapeOperation.SubtractFront,
             )
             layer = create_text_layer_with_path(textbox_ref_shape, layer)
         return layer
