@@ -1,6 +1,6 @@
 from functools import cached_property
 
-from photoshop.api import ElementPlacement
+from photoshop.api import ElementPlacement, RasterizeType
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
@@ -9,7 +9,12 @@ from src.enums.layers import LAYERS
 from src.enums.settings import BorderlessColorMode
 from src.helpers.colors import GradientConfig, get_pinline_gradient, rgb_white
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
-from src.helpers.masks import apply_mask_to_layer_fx, enable_vector_mask
+from src.helpers.masks import (
+    apply_mask,
+    apply_mask_to_layer_fx,
+    copy_layer_mask,
+    enable_vector_mask,
+)
 from src.layouts import ClassLayout, SagaLayout
 from src.schema.colors import ColorObject
 from src.templates.case import CaseMod
@@ -355,7 +360,28 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 f"{LAYERS.TEXTBOX_REFERENCE}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
                 self.vertical_group,
             )
-        return super().textbox_reference
+
+        # TODO Build a new reference shape based on MDFC element dimensions
+        # instead of relying on a mask.
+        ref = get_reference_layer(
+            self.size, getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group)
+        )
+        if (
+            self.is_mdfc
+            and ref
+            and (
+                mask_source := getLayer(
+                    LAYERS.MDFC, [self.mask_group, LAYERS.TEXTBOX_REFERENCE]
+                )
+            )
+        ):
+            copy_layer_mask(layer_from=mask_source, layer_to=ref)
+            # The template uses shapes as reference layers, which need to be
+            # rasterized before a mask can be applied to them.
+            ref.rasterize(RasterizeType.Shape)
+            apply_mask(ref)
+            ref.visible = False
+        return ref
 
     @cached_property
     def textbox_bottom_reference(self) -> ReferenceLayer | None:
