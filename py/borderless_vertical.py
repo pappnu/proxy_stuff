@@ -183,6 +183,20 @@ class BorderlessVertical(VerticalMod):
         color = color or self.RGB_BLACK
         layer.textItem.color = color
 
+    def handle_authentic_front_text_coloring(self) -> None:
+        if self.is_authentic_front and self.text_layer_name:
+            self.set_layer_font_color(self.text_layer_name)
+
+        if self.is_authentic_front and self.color_typeline and self.text_layer_type:
+            self.set_layer_font_color(self.text_layer_type)
+
+        if (
+            self.color_textbox
+            and self.show_vertical_reminder_text
+            and self.text_layer_reminder
+        ):
+            self.set_layer_font_color(self.text_layer_reminder)
+
     @cached_property
     def text_layer_pt(self) -> ArtLayer | None:
         if self.is_vertical_creature and not self.has_extra_textbox:
@@ -244,20 +258,17 @@ class BorderlessVertical(VerticalMod):
 
     # endregion Saga
 
+    # region MDFC
+
+    def text_layers_mdfc_front(self) -> None:
+        self.handle_authentic_front_text_coloring()
+
+    # endregion MDFC
+
     # region Transform
 
     def text_layers_transform_front(self) -> None:
-        if self.is_authentic_front and self.text_layer_name:
-            self.set_layer_font_color(self.text_layer_name)
-
-        if self.is_authentic_front and self.color_typeline and self.text_layer_type:
-            self.set_layer_font_color(self.text_layer_type)
-
-        if self.color_textbox and self.show_vertical_reminder_text:
-            self.set_layer_font_color(self.text_layer_reminder)
-
-        if self.is_authentic_front and self.text_layer_pt:
-            self.set_layer_font_color(self.text_layer_pt)
+        self.handle_authentic_front_text_coloring()
 
         if (
             self.color_textbox
