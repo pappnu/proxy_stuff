@@ -297,7 +297,7 @@ class BorderlessShowcase(
 
     @cached_property
     def has_flipside_pt(self) -> bool:
-        return self.is_transform and self.is_flipside_creature
+        return self.is_transform and self.is_front and self.is_flipside_creature
 
     @cached_property
     def requires_text_shaping(self) -> bool:
@@ -323,10 +323,12 @@ class BorderlessShowcase(
 
     @cached_property
     def doc_height(self) -> int | float:
+        assert self.docref
         return self.docref.height
 
     @cached_property
     def doc_width(self) -> int | float:
+        assert self.docref
         return self.docref.width
 
     @cached_property
@@ -803,7 +805,7 @@ class BorderlessShowcase(
 
         if ref:
             if (
-                self.is_mdfc
+                self.is_mdfc and self.textbox_overflow_reference
                 # and (
                 #     mdfc_mask := getLayer(
                 #         LAYERS.MDFC, [self.mask_group, LAYERS.TEXTBOX_REFERENCE]
@@ -893,7 +895,7 @@ class BorderlessShowcase(
 
     @cached_property
     def flipside_pt_arrow(self) -> ArtLayer | None:
-        if self.is_front and self.is_flipside_creature:
+        if self.has_flipside_pt:
             return getLayer(
                 "Flipside PT Arrow",
                 [
@@ -1727,8 +1729,12 @@ class BorderlessShowcase(
                     self.expansion_symbol_layer.translate(0, delta)
 
                 # Shift indicator
-                if self.is_type_shifted and self.indicator_group:
-                    self.indicator_group.parent.translate(0, delta)
+                if (
+                    self.is_type_shifted
+                    and self.indicator_group
+                    and isinstance((parent := self.indicator_group.parent), LayerSet)
+                ):
+                    parent.translate(0, delta)
 
                 # Shift relevant Adventure layers
                 if self.is_adventure:
@@ -2108,7 +2114,7 @@ class BorderlessShowcase(
                 self.layout.flavor_texts,
                 self.layout.oracle_texts,
             ):
-                if textbox_ref:
+                if text_layer and textbox_ref:
                     args.append(
                         {
                             "base_text_layer": text_layer,
