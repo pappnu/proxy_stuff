@@ -1,6 +1,7 @@
 import os
 import re
-from typing import Callable, Pattern
+from collections.abc import Callable
+from re import Pattern
 
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
@@ -26,7 +27,7 @@ def find_file_in_directory(
 def find_layer(
     layer_sets: Document | LayerSet, condition: Callable[[ArtLayer], bool]
 ) -> ArtLayer | None:
-    for layer in layer_sets.layers:
+    for layer in layer_sets.artLayers:
         if condition(layer):
             return layer
     for layer_set in layer_sets.layerSets:
@@ -37,17 +38,15 @@ def find_layer(
 
 
 def find_art_layers_and_their_preceding_layers_names(
-    layer_sets: Document | LayerSet, condition: Callable[[ArtLayer], bool]
+    layer_sets: Document | LayerSet, condition: Callable[[ArtLayer | LayerSet], bool]
 ) -> list[tuple[ArtLayer, str | None]]:
     found: list[tuple[ArtLayer, str | None]] = []
     for art_layer in layer_sets.artLayers:
         if condition(art_layer):
-            for index, layer in enumerate(layer_sets.layers):
+            prev_layer: ArtLayer | LayerSet | None = None
+            for layer in layer_sets.layers:
                 if layer.name == art_layer.name:
-                    if index > 0:
-                        found.append((art_layer, prev_layer.name))
-                    else:
-                        found.append((art_layer, None))
+                    found.append((art_layer, prev_layer.name if prev_layer else None))
                 if not condition(layer):
                     prev_layer = layer
     for layer_set in layer_sets.layerSets:
@@ -84,17 +83,17 @@ def load_old_artwork(instance: BaseTemplate):
 
     if file := open_ask_file_dialog(initialdir=directory_path, filetypes=filetypes):
 
-        def is_art_layer(art_layer: ArtLayer):
+        def is_art_layer(art_layer: ArtLayer | LayerSet):
             return bool(re.match(r"^(Generative )?Layer [0-9]+", art_layer.name))
 
         default_preceding_layer = template_doc.layers[-2]
         print(default_preceding_layer.name)
 
-        if instance.art_layer.name != "Layer 1":
+        if instance.art_layer and instance.art_layer.name != "Layer 1":
             CONSOLE.update(
                 f"WARNING: The existing art layer isn't as expected. Found '{instance.art_layer.name}' instead of 'Layer 1'"
             )
-        else:
+        elif instance.art_layer:
             instance.art_layer.remove()
 
         backup_doc = APP.open(file)

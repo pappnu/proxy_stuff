@@ -1,4 +1,4 @@
-from typing import Iterable
+from collections.abc import Iterable
 
 from photoshop.api import ElementPlacement, RasterizeType
 from photoshop.api._artlayer import ArtLayer
@@ -36,9 +36,11 @@ def copy_to_mask(
     enter_rgb_channel()
 
 
-def create_mask_from(apply_to: Iterable[ArtLayer | LayerSet], layers: Iterable[ArtLayer]) -> None:
+def create_mask_from(
+    apply_to: Iterable[ArtLayer | LayerSet], layers: Iterable[ArtLayer]
+) -> None:
     background = create_color_layer(rgb_white(), None, clipped=False)
-    layers_to_merge: list[ArtLayer] = [background]
+    layers_to_merge: list[ArtLayer | LayerSet] = [background]
     for layer in layers:
         duplicate = layer.duplicate(background, ElementPlacement.PlaceBefore)
         duplicate.visible = True

@@ -1,8 +1,9 @@
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from tkinter import Tk
 from tkinter.filedialog import askopenfile
 from tkinter.messagebox import askyesno
-from typing import Any, Iterable
+from typing import Any
 
 
 def ask_for_confirmation(title: str, message: str) -> bool:

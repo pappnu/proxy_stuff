@@ -26,7 +26,7 @@ def align_dimension(
 
     if isinstance(reference_dimensions, ReferenceLayer):
         reference_dimensions = reference_dimensions.dims
-    elif isinstance(reference_dimensions, (ArtLayer, LayerSet)):
+    elif isinstance(reference_dimensions, ArtLayer | LayerSet):
         reference_dimensions = get_layer_dimensions_via_rasterization(
             reference_dimensions
         )

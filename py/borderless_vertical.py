@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from functools import cached_property
-from typing import Any, Callable
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -12,6 +12,7 @@ from src.helpers.colors import get_rgb
 from src.helpers.effects import enable_layer_fx
 from src.helpers.layers import getLayer, getLayerSet
 from src.helpers.masks import apply_mask_to_layer_fx
+from src.templates._vector import MaskAction
 from src.templates.normal import BorderlessVectorTemplate
 from src.utils.adobe import LayerObjectTypes
 
@@ -24,14 +25,14 @@ class BorderlessVertical(VerticalMod):
 
     @cached_property
     def color_typeline(self) -> bool:
-        return bool(
-            CFG.get_setting(section="COLORS", key="Color.Typeline", default=False)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Color.Typeline", default=False
         )
 
     @cached_property
     def color_textbox(self) -> bool:
-        return bool(
-            CFG.get_setting(section="COLORS", key="Color.Textbox", default=False)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Color.Textbox", default=False
         )
 
     # endregion Settings
@@ -49,7 +50,7 @@ class BorderlessVertical(VerticalMod):
     # region Shapes
 
     @cached_property
-    def twins_shape(self) -> LayerObjectTypes | list[LayerObjectTypes | None] | None:
+    def twins_shapes(self) -> list[ArtLayer | LayerSet | None]:
         if self.is_vertical_layout:
             _shape_group = getLayerSet(LAYERS.SHAPE, self.twins_group)
             return [
@@ -64,7 +65,7 @@ class BorderlessVertical(VerticalMod):
                     [_shape_group, LAYERS.TYPE_LINE],
                 ),
             ]
-        return super().twins_shape
+        return super().twins_shapes
 
     @cached_property
     def textbox_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
@@ -118,26 +119,52 @@ class BorderlessVertical(VerticalMod):
     # region Masks
 
     @cached_property
-    def border_mask(self) -> list[ArtLayer] | dict[str, Any] | None:
+    def border_mask(
+        self,
+    ) -> (
+        MaskAction
+        | tuple[ArtLayer | LayerSet, ArtLayer | LayerSet]
+        | ArtLayer
+        | LayerSet
+        | None
+    ):
         if self.is_vertical_layout:
-            return {
-                "mask": getLayer(
+            if self.border_group and (
+                layer := getLayer(
                     LAYER_NAMES.VERTICAL, [self.mask_group, LAYERS.BORDER]
-                ),
-                "layer": self.border_group,
-                "vector": True,
-            }
+                )
+            ):
+                return {
+                    "mask": layer,
+                    "layer": self.border_group,
+                    "vector": True,
+                }
+            return None
         return super().border_mask
 
     @cached_property
-    def pinlines_mask(self) -> dict[str, Any] | None:
+    def pinlines_mask(
+        self,
+    ) -> (
+        MaskAction
+        | tuple[ArtLayer | LayerSet, ArtLayer | LayerSet]
+        | ArtLayer
+        | LayerSet
+        | None
+    ):
         if self.is_vertical_layout:
-            if not self.has_extra_textbox:
-                return {
-                    "mask": getLayer(
+            if (
+                not self.has_extra_textbox
+                and self.pinlines_group
+                and (
+                    layer := getLayer(
                         f"{LAYER_NAMES.VERTICAL}{f' {LAYERS.TRANSFORM}' if self.is_transform else ''}",
                         [self.mask_group, LAYERS.PINLINES],
-                    ),
+                    )
+                )
+            ):
+                return {
+                    "mask": layer,
                     "layer": self.pinlines_group,
                     "funcs": [apply_mask_to_layer_fx],
                 }
@@ -145,7 +172,15 @@ class BorderlessVertical(VerticalMod):
         return super().pinlines_mask
 
     @cached_property
-    def crown_mask(self) -> dict[str, Any] | None:
+    def crown_mask(
+        self,
+    ) -> (
+        MaskAction
+        | tuple[ArtLayer | LayerSet, ArtLayer | LayerSet]
+        | ArtLayer
+        | LayerSet
+        | None
+    ):
         if self.is_vertical_creature and self.is_transform:
             return None
         return super().crown_mask
@@ -229,14 +264,19 @@ class BorderlessVertical(VerticalMod):
                     self.twins_group, lambda layer: " Fill " in layer.name
                 )
             )
+            and (
+                ref := getLayerSet(
+                    LAYER_NAMES.CARD_NAME, [self.twins_group, LAYERS.SHAPE]
+                )
+            )
         ):
             layer.move(
-                getLayerSet(LAYER_NAMES.CARD_NAME, [self.twins_group, LAYERS.SHAPE]),
+                ref,
                 ElementPlacement.PlaceBefore,
             )
             create_clipping_mask(layer)
 
-    @property
+    @cached_property
     def hooks(self) -> list[Callable[[], None]]:
         return [*super().hooks, self.disable_colors]
 

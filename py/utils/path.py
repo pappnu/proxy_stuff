@@ -1,4 +1,5 @@
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from photoshop.api import ActionDescriptor, ActionReference, DialogModes
 from photoshop.api._artlayer import ArtLayer
@@ -110,7 +111,11 @@ def create_shape_layer(
     desc1.putObject(sID("using"), sID("contentLayer"), desc2)
     APP.executeAction(sID("make"), desc1, DialogModes.DisplayNoDialogs)
 
-    layer: ArtLayer = docref.activeLayer
+    layer = docref.activeLayer
+    if not isinstance(layer, ArtLayer):
+        raise ValueError(
+            "Failed to create shape layer. Active layer is unexpectedly not an ArtLayer."
+        )
     if name:
         layer.name = name
     if hide:
@@ -135,7 +140,12 @@ def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:
     desc.putEnumerated(sID("shapeOperation"), sID("shapeOperation"), cID("Sbtr"))
     APP.executeAction(cID("Mrg2"), desc, DialogModes.DisplayNoDialogs)
 
-    return APP.activeDocument.activeLayer
+    active_layer = APP.activeDocument.activeLayer
+    if not isinstance(active_layer, ArtLayer):
+        raise ValueError(
+            "Failed to subtract front shape. Active layer is unexpectedly not an ArtLayer."
+        )
+    return active_layer
 
 
 def check_layer_overlap_with_shape(layer: ArtLayer, ref: ArtLayer):

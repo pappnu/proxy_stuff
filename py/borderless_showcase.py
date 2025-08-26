@@ -1,6 +1,7 @@
+from collections.abc import Callable, Iterable, Sequence
 from functools import cached_property
 from math import ceil
-from typing import Any, Callable, Iterable, Literal, NotRequired, Sequence, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -17,7 +18,7 @@ from src.helpers.bounds import (
     get_group_dimensions,
     get_layer_dimensions,
 )
-from src.helpers.colors import GradientConfig, get_pinline_gradient, get_rgb
+from src.helpers.colors import get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.helpers.text import (
@@ -35,8 +36,14 @@ from src.layouts import (
     SplitLayout,
     StationLayout,
 )
-from src.schema.adobe import EffectGradientOverlay, EffectStroke, LayerEffects
-from src.schema.colors import ColorObject, GradientColor
+from src.schema.adobe import (
+    EffectGradientOverlay,
+    EffectStroke,
+    GradientMethod,
+    LayerEffects,
+)
+from src.schema.colors import ColorObject, GradientColor, GradientConfig
+from src.templates._vector import MaskAction
 from src.templates.adventure import AdventureMod
 from src.templates.leveler import LevelerMod
 from src.templates.planeswalker import PlaneswalkerMod
@@ -73,7 +80,7 @@ class TextboxSizingArgs(TypedDict):
     base_text_layer: ArtLayer
     base_textbox_reference: ReferenceLayer
     base_text_wrap_reference: ReferenceLayer
-    divider_layer: ArtLayer | None
+    divider_layer: ArtLayer | LayerSet | None
     oracle_text: str
     flavor_text: str | None
     min_top: NotRequired[float | int | None]
@@ -101,7 +108,7 @@ class BorderlessShowcase(
                 5: [0.20, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.80],
             }
             if self.is_split
-            else VerticalMod.gradient_location_map
+            else super().gradient_location_map
         )
 
     @cached_property
@@ -119,53 +126,44 @@ class BorderlessShowcase(
 
     @cached_property
     def is_content_aware_enabled(self) -> bool:
-        return bool(
-            CFG.get_setting(section="ART", key="Content.Aware.Fill", default=True)
+        return CFG.get_bool_setting(
+            section="ART", key="Content.Aware.Fill", default=True
         )
 
     @cached_property
     def color_limit(self) -> int:
-        setting = CFG.get_setting(
-            section="COLORS", key="Max.Colors", default="2", is_bool=False
-        )
-        if isinstance(setting, str):
-            return int(setting) + 1
-        raise ValueError(f"Received invalid value for color limit: {setting}")
+        return CFG.get_int_setting(section="COLORS", key="Max.Colors", default=2) + 1
 
     @cached_property
     def front_face_colors(self) -> bool:
         """Returns True if lighter color map should be used on front face DFC cards."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Front.Face.Colors", default=True)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Front.Face.Colors", default=True
         )
 
     @cached_property
     def multicolor_pinlines(self) -> bool:
         """Returns True if Pinlines for multicolored cards should use blended colors."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Multicolor.Pinlines", default=True)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Multicolor.Pinlines", default=True
         )
 
     @cached_property
     def pinlines_color_override(self) -> list[SolidColor]:
-        if (
-            setting := CFG.get_setting(
-                section="COLORS", key="Pinlines.Override", default=None, is_bool=False
-            )
-        ) and isinstance(setting, str):
+        if setting := CFG.get_setting(
+            section="COLORS", key="Pinlines.Override", default=None
+        ):
             return parse_hex_color_list(setting, self.console)
         return []
 
     @cached_property
     def expansion_symbol_color_override(self) -> ExpansionSymbolOverrideMode:
-        if (
-            setting := CFG.get_setting(
-                section="COLORS",
-                key="Expansion.Symbol.Override",
-                default=None,
-                is_bool=False,
-            )
-        ) and isinstance(setting, str):
+        if setting := CFG.get_setting(
+            section="COLORS",
+            key="Expansion.Symbol.Override",
+            default=None,
+            is_bool=False,
+        ):
             if setting == "Identity":
                 return ExpansionSymbolOverrideMode.Identity
             if setting == "Pinlines override":
@@ -176,14 +174,12 @@ class BorderlessShowcase(
 
     @cached_property
     def expansion_symbol_custom_colors(self) -> list[SolidColor]:
-        if (
-            setting := CFG.get_setting(
-                section="COLORS",
-                key="Expansion.Symbol.Custom",
-                default=None,
-                is_bool=False,
-            )
-        ) and isinstance(setting, str):
+        if setting := CFG.get_setting(
+            section="COLORS",
+            key="Expansion.Symbol.Custom",
+            default=None,
+            is_bool=False,
+        ):
             return parse_hex_color_list(setting, self.console)
         return []
 
@@ -206,7 +202,7 @@ class BorderlessShowcase(
         )
 
     @cached_property
-    def expansion_symbol_gradient_method(self) -> str:
+    def expansion_symbol_gradient_method(self) -> GradientMethod:
         if (
             setting := CFG.get_setting(
                 section="COLORS",
@@ -214,7 +210,7 @@ class BorderlessShowcase(
                 default=None,
                 is_bool=False,
             )
-        ) and isinstance(setting, str):
+        ) and setting in ("perceptual", "linear", "classic", "smooth", "stripes"):
             return setting
         return "linear"
 
@@ -242,7 +238,7 @@ class BorderlessShowcase(
 
     @cached_property
     def flip_twins(self) -> bool:
-        return bool(CFG.get_setting(section="SHAPES", key="Flip.Twins", default=False))
+        return CFG.get_bool_setting(section="SHAPES", key="Flip.Twins", default=False)
 
     @cached_property
     def textbox_height(self) -> float | int:
@@ -267,7 +263,7 @@ class BorderlessShowcase(
 
     # region Checks
 
-    @property
+    @cached_property
     def is_creature(self) -> bool:
         return self.is_battle or super().is_creature
 
@@ -361,55 +357,58 @@ class BorderlessShowcase(
 
             # Determine the automatic size
             if size == BorderlessTextbox.Automatic:
-                size_map: dict[int, BorderlessTextbox] = {
-                    1: BorderlessTextbox.Short,
-                    2: BorderlessTextbox.Medium,
-                    3: BorderlessTextbox.Normal,
-                    4: BorderlessTextbox.Tall,
-                }
+                if self.text_layer_rules_adventure and self.text_layer_rules_base:
+                    size_map: dict[int, BorderlessTextbox] = {
+                        1: BorderlessTextbox.Short,
+                        2: BorderlessTextbox.Medium,
+                        3: BorderlessTextbox.Normal,
+                        4: BorderlessTextbox.Tall,
+                    }
 
-                # Determine size for left textbox
-                test_layer = self.text_layer_rules_adventure
-                test_text = self.layout.oracle_text_adventure
-                if self.layout.flavor_text_adventure:
-                    test_text += f"\r{self.layout.flavor_text_adventure}"
-                test_layer.textItem.contents = test_text.replace("\n", "\r")
+                    # Determine size for left textbox
+                    test_layer = self.text_layer_rules_adventure
+                    test_text = self.layout.oracle_text_adventure
+                    if self.layout.flavor_text_adventure:
+                        test_text += f"\r{self.layout.flavor_text_adventure}"
+                    test_layer.textItem.contents = test_text.replace("\n", "\r")
 
-                num = get_line_count(test_layer, self.docref)
-                if self.layout.flavor_text:
-                    num += 1
+                    num = get_line_count(test_layer, self.docref)
+                    if self.layout.flavor_text:
+                        num += 1
 
-                if num < 4:
-                    size_left = 1
-                elif num < 6:
-                    size_left = 2
-                elif num < 8:
-                    size_left = 3
+                    if num < 4:
+                        size_left = 1
+                    elif num < 6:
+                        size_left = 2
+                    elif num < 8:
+                        size_left = 3
+                    else:
+                        size_left = 4
+
+                    # Determine size for right textbox
+                    test_layer = self.text_layer_rules_base
+                    test_text = self.layout.oracle_text
+                    if self.layout.flavor_text:
+                        test_text += f"\r{self.layout.flavor_text}"
+                    test_layer.textItem.contents = test_text.replace("\n", "\r")
+
+                    num = get_line_count(test_layer, self.docref)
+                    if self.layout.flavor_text:
+                        num += 1
+
+                    if num < 12:
+                        size_right = 1
+                    elif num < 14:
+                        size_right = 2
+                    elif num < 16:
+                        size_right = 3
+                    else:
+                        size_right = 4
+
+                    # Final size is the biggest required
+                    size = size_map[max(size_left, size_right)]
                 else:
-                    size_left = 4
-
-                # Determine size for right textbox
-                test_layer = self.text_layer_rules_base
-                test_text = self.layout.oracle_text
-                if self.layout.flavor_text:
-                    test_text += f"\r{self.layout.flavor_text}"
-                test_layer.textItem.contents = test_text.replace("\n", "\r")
-
-                num = get_line_count(test_layer, self.docref)
-                if self.layout.flavor_text:
-                    num += 1
-
-                if num < 12:
-                    size_right = 1
-                elif num < 14:
-                    size_right = 2
-                elif num < 16:
-                    size_right = 3
-                else:
-                    size_right = 4
-
-                # Final size is the biggest required
-                size = size_map[max(size_left, size_right)]
+                    return BorderlessTextbox.Tall
             return size
         if isinstance(self.layout, PlaneswalkerLayout):
             if self.layout.pw_size > 3:
@@ -464,13 +463,17 @@ class BorderlessShowcase(
     # region Colors
 
     @cached_property
-    def pt_colors(self) -> list[int] | list[dict[str, Any]]:
+    def pt_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
         return self.pinlines_colors
 
     _gradient_start_location: float = 0.05
 
     @cached_property
-    def pinlines_colors(self) -> list[int] | list[dict[str, Any]]:
+    def pinlines_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
         if override := self.pinlines_color_override:
             colors = ""
             color_map: dict[str, SolidColor] = {}
@@ -956,10 +959,10 @@ class BorderlessShowcase(
             return layer
 
     @cached_property
-    def pinlines_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
+    def pinlines_shapes(self) -> list[ArtLayer | LayerSet | None]:
         _shape_group = self.pinlines_shape_group
 
-        layers: list[LayerObjectTypes] = []
+        layers: list[ArtLayer | LayerSet | None] = []
 
         # Name
         if (self.is_transform or self.is_mdfc) and (
@@ -1002,11 +1005,11 @@ class BorderlessShowcase(
         return None
 
     @cached_property
-    def twins_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
-        return None
+    def twins_shapes(self) -> list[ArtLayer | LayerSet | None]:
+        return []
 
     @cached_property
-    def crown_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
+    def crown_shape(self) -> ArtLayer | None:
         return None
 
     def enable_crown(self) -> None:
@@ -1026,7 +1029,7 @@ class BorderlessShowcase(
 
     # region Masks
 
-    def pw_mask_bottom(self):
+    def pw_mask_bottom(self) -> MaskAction | None:
         if (
             self.is_planeswalker
             and self.pt_box_and_bottom_pinline_type in ("Partial", "Split")
@@ -1038,7 +1041,13 @@ class BorderlessShowcase(
     @cached_property
     def enabled_masks(
         self,
-    ) -> list[dict[str, Any] | list[Any] | ArtLayer | LayerSet | None]:
+    ) -> list[
+        MaskAction
+        | tuple[ArtLayer | LayerSet, ArtLayer | LayerSet]
+        | ArtLayer
+        | LayerSet
+        | None
+    ]:
         return [self.pw_mask_bottom()]
 
     # endregion Masks
@@ -1212,7 +1221,6 @@ class BorderlessShowcase(
                             rotation=self.expansion_symbol_gradient_angle,
                             opacity=100,
                             scale=self.expansion_symbol_gradient_scale,
-                            # TODO fix typing once pull request is accepted
                             method=self.expansion_symbol_gradient_method,
                         )
                     )
@@ -1228,7 +1236,7 @@ class BorderlessShowcase(
     def format_temp_rules_text(
         self,
         layer: ArtLayer,
-        divider_layer: ArtLayer | None,
+        divider_layer: ArtLayer | LayerSet | None,
         oracle_text: str,
         flavor_text: str | None,
     ) -> None:
@@ -1274,7 +1282,7 @@ class BorderlessShowcase(
         base_text_layer: ArtLayer,
         base_textbox_reference: ReferenceLayer,
         base_text_wrap_reference: ReferenceLayer,
-        divider_layer: ArtLayer | None,
+        divider_layer: ArtLayer | LayerSet | None,
         oracle_text: str,
         flavor_text: str | None,
         min_top: float | int | None = None,
@@ -1421,13 +1429,11 @@ class BorderlessShowcase(
                     shaped_text
                 )
                 align_bottom = ceil(
-                    (
-                        min(
-                            self.textbox_overflow_reference.dims["top"],
-                            dims_textbox_ref["bottom"],
-                        )
-                        - vertical_padding[1]
+                    min(
+                        self.textbox_overflow_reference.dims["top"],
+                        dims_textbox_ref["bottom"],
                     )
+                    - vertical_padding[1]
                 )
 
                 mock_dims: LayerDimensions = {
@@ -1483,24 +1489,22 @@ class BorderlessShowcase(
             else min_top
         )
         align_y = ceil(
-            (
-                align_to
-                if align_to is not None
-                else chosen_top
-                + (
-                    (
-                        dims_textbox_ref["bottom"]
-                        - (
-                            # If there's plenty of space, ignore padding
-                            vertical_padding[1]
-                            if dims_text_ref_shape["height"] + sum(vertical_padding)
-                            > dims_textbox_ref["bottom"] - min_top
-                            else 0
-                        )
-                        - chosen_top
+            align_to
+            if align_to is not None
+            else chosen_top
+            + (
+                (
+                    dims_textbox_ref["bottom"]
+                    - (
+                        # If there's plenty of space, ignore padding
+                        vertical_padding[1]
+                        if dims_text_ref_shape["height"] + sum(vertical_padding)
+                        > dims_textbox_ref["bottom"] - min_top
+                        else 0
                     )
-                    / 2
+                    - chosen_top
                 )
+                / 2
             )
         )
 
@@ -1589,7 +1593,8 @@ class BorderlessShowcase(
             # Some unknown interaction causes the previous reference layer
             # to turn visible when starting a new sizing loop. Selecting some
             # other layer seems to fix it without causing side effects.
-            select_layer(self.art_layer)
+            if self.art_layer:
+                select_layer(self.art_layer)
             if sized:
                 sizes.append(sized)
                 if (
@@ -1668,6 +1673,10 @@ class BorderlessShowcase(
                         isinstance(entry, FormattedTextArea)
                         and entry.layer is self.text_layer_rules
                     ):
+                        # The text element already has a proper width
+                        # This can also create an undesirable interaction
+                        # where the text is scaled to be minimal.
+                        entry.scale_width = False
                         if entry.reference_dims and (
                             stroke_details := get_stroke_details(entry.layer)
                         ):
@@ -1748,7 +1757,7 @@ class BorderlessShowcase(
                             layer.translate(0, delta)
 
     def pw_enable_loyalty_graphics(self) -> None:
-        if self.is_planeswalker:
+        if self.is_planeswalker and self.loyalty_group:
             self.loyalty_group.visible = True
 
     @cached_property
@@ -1761,7 +1770,7 @@ class BorderlessShowcase(
         methods.insert(0, self.adjust_split_textboxes_to_font_size)
         return methods
 
-    @property
+    @cached_property
     def post_text_methods(self) -> list[Callable[[], None]]:
         methods = super().post_text_methods
         methods.remove(self.pw_ability_mask)
@@ -1775,6 +1784,8 @@ class BorderlessShowcase(
             methods.append(self.match_adventure_font_sizes)
         if self.is_prototype:
             methods.insert(0, self.post_text_layers_prototype)
+            if self.textbox_positioning not in methods:
+                methods.append(self.textbox_positioning)
         return [
             *methods,
             self.expansion_symbol_handler,
@@ -1813,7 +1824,7 @@ class BorderlessShowcase(
             self.generate_layer(
                 group=self.adventure_pinlines_group,
                 colors=self.pinlines_color_map.get(
-                    "".join(self.layout.color_identity_adventure)
+                    "".join(self.layout.color_identity_adventure), (0, 0, 0)
                 ),
             )
 
@@ -2264,10 +2275,10 @@ class BorderlessShowcase(
         if (
             self.textbox_reference
             and self.prototype_group
-            and self.prototype_pt_box_shape
+            and self.prototype_pt_group
         ):
             pt_dims = get_layer_dimensions_via_rasterization(
-                self.prototype_pt_box_shape
+                self.prototype_pt_group
             )
             ref_dims = self.textbox_reference.dims
             delta = ref_dims["top"] - pt_dims["bottom"]

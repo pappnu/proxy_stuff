@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from functools import cached_property
-from typing import Iterable, NotRequired, TypedDict
+from typing import NotRequired, TypedDict
 
 from .base import uxp
 

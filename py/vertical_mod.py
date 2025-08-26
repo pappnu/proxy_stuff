@@ -7,7 +7,7 @@ from photoshop.api._layerSet import LayerSet
 from src import CFG
 from src.enums.layers import LAYERS
 from src.enums.settings import BorderlessColorMode
-from src.helpers.colors import GradientConfig, get_pinline_gradient, rgb_white
+from src.helpers.colors import get_pinline_gradient, rgb_white
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.helpers.masks import (
     apply_mask,
@@ -16,13 +16,13 @@ from src.helpers.masks import (
     enable_vector_mask,
 )
 from src.layouts import ClassLayout, SagaLayout
-from src.schema.colors import ColorObject
+from src.schema.colors import ColorObject, GradientConfig
 from src.templates.case import CaseMod
 from src.templates.classes import ClassMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.saga import SagaMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
-from src.utils.adobe import LayerObjectTypes, ReferenceLayer
+from src.utils.adobe import ReferenceLayer
 
 from .helpers import LAYER_NAMES, get_numeric_setting
 from .utils.layer_fx import get_stroke_details
@@ -41,8 +41,8 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     @cached_property
     def show_vertical_reminder_text(self) -> bool:
-        return bool(
-            CFG.get_setting(section="TEXT", key="Vertical.Reminder", default=False)
+        return CFG.get_bool_setting(
+            section="TEXT", key="Vertical.Reminder", default=False
         )
 
     # endregion settings
@@ -156,7 +156,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 placement=ElementPlacement.PlaceAfter,
             )
 
-            if self.text_layer_ability:
+            if self.text_layer_ability and self.pt_reference:
                 # Build bottom text layer
                 text_shape = self.bottom_textbox_shape.duplicate()
                 pt_reference = self.pt_reference.duplicate(
@@ -325,7 +325,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # region Reference layers
 
     @cached_property
-    def art_reference(self) -> ReferenceLayer:
+    def art_reference(self) -> ReferenceLayer | None:
         return super(SagaMod, self).art_reference
 
     @cached_property
@@ -408,11 +408,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # region Shapes
 
     @cached_property
-    def pinlines_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
+    def pinlines_shapes(self) -> list[ArtLayer | LayerSet | None]:
         if self.is_vertical_layout:
             _shape_group = getLayerSet(LAYERS.SHAPE, self.pinlines_group)
 
-            layers: list[LayerObjectTypes] = []
+            layers: list[ArtLayer | LayerSet | None] = []
 
             # Name
             if layer := getLayerSet(
@@ -424,8 +424,10 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 layers.append(layer)
 
             # Add nickname pinlines if required
-            if self.is_nickname:
-                layers.append(getLayerSet(LAYERS.NICKNAME, _shape_group))
+            if self.is_nickname and (
+                layer := getLayerSet(LAYERS.NICKNAME, _shape_group)
+            ):
+                layers.append(layer)
 
             # Typeline
             if layer := getLayer(
@@ -443,7 +445,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 layers.append(layer)
 
             return layers
-        return super().pinlines_shape
+        return super().pinlines_shapes
 
     @cached_property
     def typeline_pinline_shape(self) -> ArtLayer | None:
@@ -468,11 +470,13 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     # region Color Maps
 
-    crown_color_map = {
-        **BorderlessVectorTemplate.crown_color_map,
-        "U": "#116cad",
-        "Artifact": "#a3b6bf",
-    }
+    @cached_property
+    def crown_color_map(self) -> dict[str, ColorObject]:
+        return {
+            **super().crown_color_map,
+            "U": "#116cad",
+            "Artifact": "#a3b6bf",
+        }
 
     @cached_property
     def dark_color_map(self) -> dict[str, ColorObject]:
@@ -657,14 +661,12 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 self.typeline_pinline_shape.translate(0, delta)
 
             # Shift typeline box
-            if isinstance(self.twins_shape, list) and isinstance(
-                (typeline_box := self.twins_shape[1]), ArtLayer
-            ):
+            if isinstance((typeline_box := self.twins_shapes[1]), ArtLayer):
                 typeline_box.translate(0, delta)
 
                 # Create mask for pinlines
                 if (
-                    isinstance((name_box := self.twins_shape[0]), ArtLayer)
+                    isinstance((name_box := self.twins_shapes[0]), ArtLayer)
                     and self.bottom_textbox_shape
                     and self.pinlines_group
                 ):
@@ -683,14 +685,19 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 self.expansion_symbol_layer.translate(0, delta)
 
             # Shift indicator
-            if self.is_type_shifted and self.indicator_group:
-                self.indicator_group.parent.translate(0, delta)
+            if (
+                self.is_type_shifted
+                and self.indicator_group
+                and isinstance((parent := self.indicator_group.parent), LayerSet)
+            ):
+                parent.translate(0, delta)
 
             # For some reason, at this point Photoshop is in a state where
             # even basic actions like removing a layer that is not selected
             # causes the currently selected layer to become visible, so as a
             # precaution let's select some layer that should be visible anyway.
-            select_layer(self.art_layer)
+            if self.art_layer:
+                select_layer(self.art_layer)
         else:
             super().textbox_positioning()
 
@@ -720,9 +727,9 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     # TODO find out a way to set the cost colon as white that doesn't involve lots of copy paste
     def text_layers_classes(self) -> None:
-        if isinstance(self.layout, ClassLayout):
+        if isinstance(self.layout, ClassLayout) and self.text_layer_ability:
             # Add first static line
-            self.line_layers.append(self.text_layer_ability)
+            self.class_line_layers.append(self.text_layer_ability)
             self.text.append(
                 FormattedTextField(
                     layer=self.text_layer_ability,
@@ -734,26 +741,27 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             for i, line in enumerate(self.layout.class_lines[1:]):
                 # Create a new ability line
                 line_layer = self.text_layer_ability.duplicate()
-                self.line_layers.append(line_layer)
+                self.class_line_layers.append(line_layer)
 
-                # Use existing stage divider or create new one
-                stage = self.stage_group if i == 0 else self.stage_group.duplicate()
-                cost, level = [*stage.artLayers][:2]
-                self.stage_layers.append(stage)
+                if self.stage_group:
+                    # Use existing stage divider or create new one
+                    stage = self.stage_group if i == 0 else self.stage_group.duplicate()
+                    cost, level = [*stage.artLayers][:2]
+                    self.class_stage_layers.append(stage)
 
-                # Add text layers to be formatted
-                self.text.extend(
-                    [
-                        FormattedTextField(layer=line_layer, contents=line["text"]),
-                        FormattedTextField(
-                            layer=cost,
-                            contents=f"{line['cost']}:",
-                            # the whole function had to be overridden to set this color kwarg
-                            color=rgb_white(),
-                        ),
-                        TextField(layer=level, contents=f"Level {line['level']}"),
-                    ]
-                )
+                    # Add text layers to be formatted
+                    self.text.extend(
+                        [
+                            FormattedTextField(layer=line_layer, contents=line["text"]),
+                            FormattedTextField(
+                                layer=cost,
+                                contents=f"{line['cost']}:",
+                                # the whole function had to be overridden to set this color kwarg
+                                color=rgb_white(),
+                            ),
+                            TextField(layer=level, contents=f"Level {line['level']}"),
+                        ]
+                    )
 
     # endregion Class
 
@@ -800,22 +808,23 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             ):
                 for i, line in enumerate(self.layout.saga_lines):
                     # Generate icon layers for this ability
-                    icons: list[LayerSet] = []
+                    icons: list[ArtLayer | LayerSet] = []
                     for n in line["icons"]:
                         text_ref.textItem.contents = n
                         duplicate = icon_ref.duplicate()
                         icons.append(duplicate)
-                    self.icon_layers.append(icons)
+                    self.saga_icon_layers.append(icons)
 
                     # Add ability text for this ability
-                    layer = (
-                        self.text_layer_ability
-                        if i == 0
-                        else self.text_layer_ability.duplicate()
-                    )
-                    self.ability_layers.append(layer)
-                    self.text.append(
-                        FormattedTextField(layer=layer, contents=line["text"])
-                    )
+                    if self.text_layer_ability:
+                        layer = (
+                            self.text_layer_ability
+                            if i == 0
+                            else self.text_layer_ability.duplicate()
+                        )
+                        self.saga_ability_layers.append(layer)
+                        self.text.append(
+                            FormattedTextField(layer=layer, contents=line["text"])
+                        )
 
     # endregion Saga

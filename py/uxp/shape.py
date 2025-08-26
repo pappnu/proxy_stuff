@@ -1,5 +1,6 @@
 from enum import StrEnum
 from typing import Literal, TypedDict
+
 from photoshop.api._artlayer import ArtLayer
 
 from src import APP
@@ -43,4 +44,9 @@ def merge_shapes(*args: ArtLayer, operation: ShapeOperation) -> ArtLayer:
         "_target": [{"_ref": "path", "_enum": "ordinal"}],
     }
     batch_play(desc, comb_desc)
-    return APP.activeDocument.activeLayer
+    active_layer = APP.activeDocument.activeLayer
+    if not isinstance(active_layer, ArtLayer):
+        raise ValueError(
+            "Failed to merge shapes. Active layer is unexpectedly not an ArtLayer."
+        )
+    return active_layer

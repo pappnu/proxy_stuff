@@ -1,6 +1,6 @@
+from collections.abc import Callable, Iterable
 from functools import cached_property
 from pathlib import Path
-from typing import Callable, Iterable
 
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
@@ -25,31 +25,25 @@ class BackupAndRestore(BaseTemplate):
 
     @cached_property
     def save_backup(self) -> bool:
-        return bool(CFG.get_setting(section="BACKUP", key="Save", default=False))
+        return CFG.get_bool_setting(section="BACKUP", key="Save", default=False)
 
     @cached_property
     def load_backup(self) -> bool:
-        return bool(CFG.get_setting(section="BACKUP", key="Load", default=False))
+        return CFG.get_bool_setting(section="BACKUP", key="Load", default=False)
 
     @cached_property
     def backup_directory(self) -> Path:
         if (
-            (
-                setting := (
-                    CFG.get_setting(
-                        section="BACKUP", key="Directory", default=None, is_bool=False
-                    )
-                )
+            setting := (
+                CFG.get_setting(section="BACKUP", key="Directory", default=None)
             )
-            and setting
-            and isinstance(setting, str)
-        ):
+        ) and setting:
             return Path(setting)
         return PATH.OUT / "backup"
 
     @cached_property
     def prompt_for_art_backup(self) -> bool:
-        return bool(CFG.get_setting(section="BACKUP", key="Art.Prompt", default=True))
+        return CFG.get_bool_setting(section="BACKUP", key="Art.Prompt", default=True)
 
     # endregion Settings
 
@@ -88,7 +82,7 @@ class BackupAndRestore(BaseTemplate):
 
             def save(path: Path, docref: Document | None = None) -> None:
                 self.make_backup()
-                default(path, docref=docref)
+                default(path, docref)
 
             return save
         return super().save_mode
@@ -106,10 +100,12 @@ class BackupAndRestore(BaseTemplate):
 
             default_backup_doc_layer = backup_doc.artLayers[0]
 
+            art_layer = self.art_layer
             for layer in self.layers_to_copy:
                 if layer:
                     if (
-                        layer.name == self.art_layer.name
+                        art_layer
+                        and layer.name == art_layer.name
                         and self.prompt_for_art_backup
                         and not ask_for_confirmation(
                             "Backup art layer?",
@@ -178,6 +174,8 @@ class BackupAndRestore(BaseTemplate):
             was_art_restored = False
 
             # Copy layers from backup
+            art_layer = self.art_layer
+            art_layer_name = art_layer.name if art_layer else ""
             for layer in self.layers_to_copy:
                 if layer:
                     APP.activeDocument = backup_doc
@@ -189,7 +187,7 @@ class BackupAndRestore(BaseTemplate):
                         )
                         APP.activeDocument = template_doc
                         layer_copy.name = layer.name
-                        was_art_restored = layer.name == self.art_layer.name
+                        was_art_restored = layer.name == art_layer_name
                         # Merge is used here to work around the fact that we can't just
                         # delete the old layer and copy a new one in its place
                         # because it might be cached in a property.

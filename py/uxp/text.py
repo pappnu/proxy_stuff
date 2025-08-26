@@ -3,7 +3,7 @@ from typing import Any, Literal, NotRequired, TypedDict
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
-from photoshop.api.enumerations import PointKind, AutoKernType
+from photoshop.api.enumerations import AutoKernType, PointKind
 
 from src import APP
 from src.helpers.effects import copy_layer_fx
@@ -294,7 +294,11 @@ def create_text_layer_with_path(
     }
     batch_play(desc)
 
-    created_layer: ArtLayer = APP.activeDocument.activeLayer
+    created_layer = APP.activeDocument.activeLayer
+    if not isinstance(created_layer, ArtLayer):
+        raise ValueError(
+            "Failed to create shaped text layer. Active layer is unexpectedly not an ArtLayer."
+        )
     created_layer.name = f"{reference_text.name} - Path"
 
     try:

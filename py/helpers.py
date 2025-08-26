@@ -1,9 +1,19 @@
 import re
+from _ctypes import COMError
+from collections.abc import Callable
+from contextlib import suppress
 from enum import Enum, StrEnum
 from functools import cached_property
-from typing import Callable, TypeVar
+from threading import Event
+from typing import Literal
 
-from photoshop.api import ActionDescriptor, ActionReference, DialogModes, SolidColor
+from photoshop.api import (
+    ActionDescriptor,
+    ActionReference,
+    DialogModes,
+    RasterizeType,
+    SolidColor,
+)
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
 from photoshop.api._layerSet import LayerSet
@@ -15,9 +25,8 @@ from src.console import TerminalConsole
 from src.gui.console import GUIConsole
 from src.helpers.colors import get_color, get_rgb_from_hex
 from src.helpers.layers import select_layer
+from src.helpers.selection import select_layer_pixels
 from src.schema.colors import ColorObject
-
-L = TypeVar("L", bound=ArtLayer | LayerSet)
 
 sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 NO_DIALOG = DialogModes.DisplayNoDialogs
@@ -99,14 +108,11 @@ def get_numeric_setting(
     default: float,
     min_max: tuple[int | float, int | float] | None = None,
 ) -> float:
-    if (
-        setting := cfg.get_setting(
-            section=section,
-            key=key,
-            default=None,
-            is_bool=False,
-        )
-    ) and isinstance(setting, str):
+    if setting := cfg.get_setting(
+        section=section,
+        key=key,
+        default=None,
+    ):
         try:
             value = float(setting)
             if min_max:
@@ -131,7 +137,7 @@ def copy_color(color: ColorObject):
 def find_art_layer(
     root: Document | LayerSet, condition: Callable[[ArtLayer], bool]
 ) -> ArtLayer | None:
-    for layer in root.layers:
+    for layer in root.artLayers:
         if condition(layer):
             return layer
     for layer_set in root.layerSets:
@@ -170,12 +176,12 @@ def create_art_layer(
 
 
 def copy_layer(
-    layer_to_copy: L,
+    layer_to_copy: ArtLayer | LayerSet,
     name: str | None = None,
-    relative_layer: ArtLayer | LayerSet | Document | None = None,
+    relative_layer: ArtLayer | LayerSet | None = None,
     insertion_location: ElementPlacement = ElementPlacement.PlaceBefore,
-) -> L:
-    new_layer: L = layer_to_copy.duplicate(relative_layer, insertion_location)
+) -> ArtLayer | LayerSet:
+    new_layer = layer_to_copy.duplicate(relative_layer, insertion_location)
     if name is not None:
         new_layer.name = name
     return new_layer
@@ -210,13 +216,13 @@ def create_clipping_mask(layer: ArtLayer):
     APP.executeAction(sID("groupEvent"), desc1, NO_DIALOG)
 
 
-def select_path_component_select_tool():
+def select_tool(tool: Literal["pathComponentSelectTool", "removeTool"]):
     """
     Selects the path component selection tool in Photoshop.
     """
     desc = ActionDescriptor()
     ref = ActionReference()
-    ref.putClass(sID("pathComponentSelectTool"))
+    ref.putClass(sID(tool))
     desc.putReference(cID("null"), ref)
     desc.putBoolean(sID("dontRecord"), True)
     APP.executeAction(cID("slct"), desc, NO_DIALOG)
@@ -232,7 +238,7 @@ def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
         The layer that the mask was applied to.
     """
     select_layer(shape)
-    select_path_component_select_tool()
+    select_tool("pathComponentSelectTool")
     copy()
     select_layer(layer)
     paste()
@@ -256,3 +262,36 @@ def rasterize_layer_style(layer: ArtLayer | LayerSet) -> None:
     desc.putReference(cID("null"), ref)
     desc.putEnumerated(cID("What"), sID("rasterizeItem"), sID("layerStyle"))
     APP.executeAction(idrasterizeLayer, desc, NO_DIALOG)
+
+
+def manual_fill(
+    console: GUIConsole | TerminalConsole, event: Event, layer: ArtLayer | None = None
+) -> None:
+    docref = APP.activeDocument
+    if layer:
+        docref.activeLayer = layer
+
+    if isinstance((active_layer := docref.activeLayer), ArtLayer):
+        active_layer.rasterize(RasterizeType.EntireLayer)
+
+        select_layer_pixels(active_layer)
+        selection = docref.selection
+
+        selection.contract(6)
+        selection.feather(2)
+        selection.invert()
+
+        try:
+            select_tool("removeTool")
+        except COMError:
+            pass
+        console.await_choice(
+            event,
+            "Rendering paused for manual art filling. Click Continue to proceed ...",
+        )
+
+        # Clear selection
+        with suppress(COMError):
+            selection.deselect()
+    else:
+        print("Manual fill failed. Active layer was unexpectedly not an ArtLayer.")

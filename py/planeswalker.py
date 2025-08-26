@@ -1,5 +1,5 @@
+from collections.abc import Sequence
 from functools import cached_property
-from typing import Any, Optional
 
 from photoshop.api import (
     ActionDescriptor,
@@ -13,16 +13,19 @@ from photoshop.api._layerSet import LayerSet
 
 import src.helpers as psd
 from src import APP, CFG
-from src.enums.adobe import Dimensions
 from src.enums.layers import LAYERS
 from src.frame_logic import contains_frame_colors
+from src.layouts import PlaneswalkerLayout
+from src.schema.colors import ColorObject, GradientConfig
 from src.templates import (
     PlaneswalkerBorderlessTemplate,
     VectorBorderlessMod,
     VectorTemplate,
 )
+from src.templates._vector import MaskAction
 from src.templates.mdfc import VectorMDFCMod
 from src.templates.transform import VectorTransformMod
+from src.utils.adobe import ReferenceLayer
 
 from .helpers import LAYER_NAMES, create_vector_mask_from_shape
 from .utils.path import subtract_front_shape
@@ -55,55 +58,53 @@ class PlaneswalkerBorderlessVector(
     @cached_property
     def colored_textbox(self) -> bool:
         """Returns True if Textbox should be colored."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Color.Textbox", default=True)
-        )
+        return CFG.get_bool_setting(section="COLORS", key="Color.Textbox", default=True)
 
     @cached_property
     def multicolor_textbox(self) -> bool:
         """Returns True if Textbox for multicolored cards should use blended colors."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Multicolor.Textbox", default=True)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Multicolor.Textbox", default=True
         )
 
     @cached_property
     def multicolor_pinlines(self) -> bool:
         """Returns True if Pinlines and Crown for multicolored cards should use blended colors."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Multicolor.Pinlines", default=True)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Multicolor.Pinlines", default=True
         )
 
     @cached_property
     def multicolor_twins(self) -> bool:
         """Returns True if Twins for multicolored cards should use blended colors."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Multicolor.Twins", default=True)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Multicolor.Twins", default=True
         )
 
     @cached_property
     def hybrid_colored(self) -> bool:
         """Returns True if Twins and PT should be colored on Hybrid cards."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Hybrid.Colored", default=True)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Hybrid.Colored", default=True
         )
 
     @cached_property
     def front_face_colors(self) -> bool:
         """Returns True if lighter color map should be used on front face DFC cards."""
-        return bool(
-            CFG.get_setting(section="COLORS", key="Front.Face.Colors", default=True)
+        return CFG.get_bool_setting(
+            section="COLORS", key="Front.Face.Colors", default=True
         )
 
     @cached_property
     def drop_shadow_enabled(self) -> bool:
         """Returns True if Drop Shadow text setting is enabled."""
-        return bool(CFG.get_setting(section="SHADOWS", key="Drop.Shadow", default=True))
+        return CFG.get_bool_setting(section="SHADOWS", key="Drop.Shadow", default=True)
 
     @cached_property
     def bottom_shadow_enabled(self) -> bool:
         """Returns True if Bottom Shadow setting is enabled."""
-        return bool(
-            CFG.get_setting(section="SHADOWS", key="Bottom.Shadow", default=True)
+        return CFG.get_bool_setting(
+            section="SHADOWS", key="Bottom.Shadow", default=True
         )
 
     """
@@ -116,7 +117,7 @@ class PlaneswalkerBorderlessVector(
 
     @cached_property
     def textbox_size(self) -> str:
-        if self.layout.pw_size > 3:
+        if isinstance(self.layout, PlaneswalkerLayout) and self.layout.pw_size > 3:
             return LAYER_NAMES.PW4
         return LAYER_NAMES.PW3
 
@@ -194,7 +195,9 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def twins_colors(self) -> SolidColor | list[dict[str, Any]]:
+    def twins_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
         # Default to twins
         colors = self.twins
 
@@ -217,13 +220,15 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def textbox_colors(self) -> SolidColor | list[dict[str, Any]] | None:
+    def textbox_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
         # Non-colored textbox
         if not (
             self.colored_textbox
             and (self.is_hybrid or (self.is_multicolor and self.multicolor_textbox))
         ):
-            return
+            return []
 
         # Hybrid OR color enabled multicolor
         return psd.get_pinline_gradient(
@@ -235,7 +240,9 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def pinlines_colors(self) -> SolidColor | list[dict[str, Any]]:
+    def pinlines_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
         # Use alternate gradient location map
         return psd.get_pinline_gradient(
             # Use identity for hybrid OR color enabled multicolor
@@ -256,19 +263,26 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def text_group(self) -> Optional[LayerSet]:
+    def pinlines_size_group(self) -> LayerSet | None:
+        return psd.getLayerSet(
+            self.textbox_size,
+            [self.pinlines_group, LAYERS.SHAPE],
+        )
+
+    @cached_property
+    def text_group(self) -> LayerSet | None:
         return psd.getLayerSet(self.textbox_size, LAYERS.TEXT_AND_ICONS)
 
     @cached_property
-    def textbox_root_group(self) -> Optional[LayerSet]:
+    def textbox_root_group(self) -> LayerSet | None:
         return psd.getLayerSet(LAYERS.TEXTBOX)
 
     @cached_property
-    def textbox_size_group(self) -> Optional[LayerSet]:
+    def textbox_size_group(self) -> LayerSet | None:
         return psd.getLayerSet(self.textbox_size, [LAYERS.TEXTBOX, LAYERS.SHAPE])
 
     @cached_property
-    def textbox_group(self) -> Optional[LayerSet]:
+    def textbox_group(self) -> LayerSet | None:
         """Group to populate with ragged lines divider mask."""
         return psd.getLayerSet(
             "Ragged Lines",
@@ -281,7 +295,7 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def dfc_group(self) -> Optional[LayerSet]:
+    def dfc_group(self) -> LayerSet | None:
         layer_name = None
         layer_path: list[str] = [LAYERS.TEXT_AND_ICONS]
         if self.is_mdfc:
@@ -300,7 +314,7 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def bottom_shadow_layer(self) -> Optional[ArtLayer]:
+    def bottom_shadow_layer(self) -> ArtLayer | None:
         return psd.getLayer(LAYER_NAMES.SHADOW)
 
     """
@@ -308,16 +322,17 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def text_layer_name(self) -> Optional[ArtLayer]:
+    def text_layer_name(self) -> ArtLayer | None:
         if self.is_name_shifted:
-            psd.getLayer(LAYERS.NAME, LAYERS.TEXT_AND_ICONS).visible = False
-            name = psd.getLayer(LAYERS.NAME_SHIFT, LAYERS.TEXT_AND_ICONS)
-            name.visible = True
-            return name
+            if layer := psd.getLayer(LAYERS.NAME, LAYERS.TEXT_AND_ICONS):
+                layer.visible = False
+            if name := psd.getLayer(LAYERS.NAME_SHIFT, LAYERS.TEXT_AND_ICONS):
+                name.visible = True
+                return name
         return psd.getLayer(LAYERS.NAME, LAYERS.TEXT_AND_ICONS)
 
     @cached_property
-    def text_layer_mana(self) -> Optional[ArtLayer]:
+    def text_layer_mana(self) -> ArtLayer | None:
         return psd.getLayer(LAYERS.MANA_COST, LAYERS.TEXT_AND_ICONS)
 
     """
@@ -325,7 +340,7 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def textbox_reference(self) -> Optional[ArtLayer]:
+    def textbox_reference(self) -> ReferenceLayer | None:
         return psd.get_reference_layer(
             LAYERS.TEXTBOX_REFERENCE + " MDFC"
             if self.is_mdfc
@@ -338,15 +353,7 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def pinlines_shape(self) -> Optional[LayerSet]:
-        """Vector shape representing the outer textbox pinlines."""
-        return psd.getLayerSet(
-            self.textbox_size,
-            [self.pinlines_group, LAYERS.SHAPE],
-        )
-
-    @cached_property
-    def pinlines_card_name_shape(self) -> Optional[LayerSet]:
+    def pinlines_card_name_shape(self) -> LayerSet | None:
         """Vector shape representing the card name pinlines."""
         return psd.getLayerSet(
             LAYERS.MDFC
@@ -358,7 +365,7 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def pinlines_textbox_shape(self) -> Optional[ArtLayer]:
+    def pinlines_textbox_shape(self) -> ArtLayer | None:
         """Vector shape representing the inner textbox pinlines."""
         return psd.getLayer(
             LAYERS.NORMAL,
@@ -366,7 +373,7 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def textbox_shape(self) -> Optional[ArtLayer]:
+    def textbox_shape(self) -> ArtLayer | None:
         """Vector shape representing the card textbox."""
         return psd.getLayer(
             LAYERS.TRANSFORM if self.is_front and self.is_transform else LAYERS.TEXTBOX,
@@ -374,7 +381,7 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def textbox_shape_other(self) -> Optional[ArtLayer]:
+    def textbox_shape_other(self) -> ArtLayer | None:
         """Vector shape representing the less opaque card textbox."""
         return psd.getLayer(
             LAYERS.TRANSFORM if self.is_front and self.is_transform else LAYERS.TEXTBOX,
@@ -382,7 +389,7 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def namebox_shape(self) -> Optional[ArtLayer]:
+    def namebox_shape(self) -> ArtLayer | None:
         """Vector shape representing the card namebox."""
         return psd.getLayer(
             LAYERS.TRANSFORM if self.is_transform or self.is_mdfc else LAYERS.NORMAL,
@@ -390,7 +397,7 @@ class PlaneswalkerBorderlessVector(
         )
 
     @cached_property
-    def typebox_shape(self) -> Optional[ArtLayer]:
+    def typebox_shape(self) -> ArtLayer | None:
         """Vector shape representing the card typebox."""
         return psd.getLayer(
             self.textbox_size,
@@ -404,7 +411,7 @@ class PlaneswalkerBorderlessVector(
             self.border_shape,
             self.namebox_shape,
             self.typebox_shape,
-            self.pinlines_shape,
+            self.pinlines_size_group,
             self.pinlines_card_name_shape,
             self.pinlines_textbox_shape,
             self.textbox_shape,
@@ -416,72 +423,97 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def pinlines_vector_mask(self) -> dict[str, Any]:
+    def pinlines_vector_mask(self) -> MaskAction | None:
         """This mask hides undesired layer effects."""
-
-        # Build the shape
-        base_shape = psd.getLayer("Base", self.mask_group)
-        namebox = self.namebox_shape.duplicate(base_shape, ElementPlacement.PlaceBefore)
-        typeline = self.typebox_shape.duplicate(
-            base_shape, ElementPlacement.PlaceBefore
-        )
-        textbox = psd.getLayer(LAYERS.TEXTBOX, self.textbox_size_group).duplicate(
-            base_shape, ElementPlacement.PlaceBefore
-        )
-        parts: list[ArtLayer] = [namebox, typeline, textbox]
-        if self.is_transform and self.is_front:
-            parts.append(
-                self.pinlines_arrow.duplicate(base_shape, ElementPlacement.PlaceBefore)
+        if (
+            self.mask_group
+            and self.namebox_shape
+            and self.typebox_shape
+            and self.pinlines_arrow
+            and (target := psd.getLayerSet(LAYERS.SHAPE, self.pinlines_group))
+            and (base_shape := psd.getLayer("Base", self.mask_group))
+            and (layer := psd.getLayer(LAYERS.TEXTBOX, self.textbox_size_group))
+        ):
+            # Build the shape
+            namebox = self.namebox_shape.duplicate(
+                base_shape, ElementPlacement.PlaceBefore
             )
-        # The shapes have to be subtracted in bottom up order
-        for layer in reversed(parts):
-            base_shape = subtract_front_shape(base_shape, layer)
+            typeline = self.typebox_shape.duplicate(
+                base_shape, ElementPlacement.PlaceBefore
+            )
+            textbox = layer.duplicate(base_shape, ElementPlacement.PlaceBefore)
+            parts: list[ArtLayer] = [namebox, typeline, textbox]
+            if self.is_transform and self.is_front:
+                parts.append(
+                    self.pinlines_arrow.duplicate(
+                        base_shape, ElementPlacement.PlaceBefore
+                    )
+                )
+            # The shapes have to be subtracted in bottom up order
+            for layer in reversed(parts):
+                base_shape = subtract_front_shape(base_shape, layer)
 
-        # Create vector mask fails if the layer isn't visible
-        self.mask_group.visible = True
-        mask = create_vector_mask_from_shape(
-            psd.create_new_layer("Pinlines"), base_shape
-        )
-        self.mask_group.visible = False
+            # Create vector mask fails if the layer isn't visible
+            self.mask_group.visible = True
+            mask = create_vector_mask_from_shape(
+                psd.create_new_layer("Pinlines"), base_shape
+            )
+            self.mask_group.visible = False
 
-        # Cleanup
-        base_shape.remove()
+            # Cleanup
+            base_shape.remove()
 
-        return {
-            "mask": mask,
-            "vector": True,
-            "layer": psd.getLayerSet(LAYERS.SHAPE, self.pinlines_group),
-            "funcs": [apply_vector_mask_to_layer_fx],
-        }
+            return {
+                "mask": mask,
+                "vector": True,
+                "layer": target,
+                "funcs": [apply_vector_mask_to_layer_fx],
+            }
 
     @cached_property
-    def mdfc_pinlines_mask(self) -> dict[str, Any]:
+    def mdfc_pinlines_mask(self) -> MaskAction | None:
         """This mask hides pinlines below the MDFC bottom box."""
-        return {
-            "mask": psd.getLayer("MDFC Bottom", self.mask_group),
-            "vector": True,
-            "layer": psd.getLayerSet(
+        if (mask := psd.getLayer("MDFC Bottom", self.mask_group)) and (
+            target := psd.getLayerSet(
                 self.textbox_size, [self.pinlines_group, LAYERS.SHAPE]
-            ),
-        }
+            )
+        ):
+            return {
+                "mask": mask,
+                "vector": True,
+                "layer": target,
+            }
 
     @cached_property
-    def transform_arrow_textbox_pinlines_mask(self) -> dict[str, Any]:
+    def transform_arrow_textbox_pinlines_mask(self) -> MaskAction | None:
         """This mask hides the textbox stroke from where the transform arrow is."""
-        return {
-            "mask": psd.getLayer(LAYER_NAMES.ARROW, self.mask_group),
-            "vector": True,
-            "layer": psd.getLayerSet(
+        if (mask := psd.getLayer(LAYER_NAMES.ARROW, self.mask_group)) and (
+            target := psd.getLayerSet(
                 self.textbox_size, [self.pinlines_group, LAYERS.TEXTBOX]
-            ),
-        }
+            )
+        ):
+            return {
+                "mask": mask,
+                "vector": True,
+                "layer": target,
+            }
 
     @cached_property
     def enabled_masks(
         self,
-    ) -> list[dict[str, Any] | list[ArtLayer | LayerSet] | ArtLayer | LayerSet | None]:
+    ) -> list[
+        MaskAction
+        | tuple[ArtLayer | LayerSet, ArtLayer | LayerSet]
+        | ArtLayer
+        | LayerSet
+        | None
+    ]:
         masks: list[
-            dict[str, Any] | list[ArtLayer | LayerSet] | ArtLayer | LayerSet | None
+            MaskAction
+            | tuple[ArtLayer | LayerSet, ArtLayer | LayerSet]
+            | ArtLayer
+            | LayerSet
+            | None
         ] = [self.pinlines_vector_mask]
         if self.is_mdfc:
             masks.append(self.mdfc_pinlines_mask)
@@ -520,11 +552,12 @@ class PlaneswalkerBorderlessVector(
         # super().enable_frame_layers()
 
         # Sahdow
-        if self.bottom_shadow_enabled:
+        if self.bottom_shadow_enabled and self.bottom_shadow_layer:
             self.bottom_shadow_layer.visible = True
 
         # Enable text and icons
-        self.text_group.visible = True
+        if self.text_group:
+            self.text_group.visible = True
 
         # Enable vector shapes
         self.enable_shape_layers()
@@ -548,18 +581,20 @@ class PlaneswalkerBorderlessVector(
             )
 
         # Twins
-        self.generate_layer(
-            group=self.twins_group,
-            colors=self.twins_colors,
-            masks=self.twins_masks,
-        )
+        if self.twins_group:
+            self.generate_layer(
+                group=self.twins_group,
+                colors=self.twins_colors,
+                masks=self.twins_masks,
+            )
 
         # Textbox
-        self.generate_layer(
-            group=self.textbox_root_group,
-            colors=self.textbox_colors,
-            masks=self.textbox_masks,
-        )
+        if self.textbox_colors and self.textbox_root_group:
+            self.generate_layer(
+                group=self.textbox_root_group,
+                colors=self.textbox_colors,
+                masks=self.textbox_masks,
+            )
 
     def pw_text_layers(self) -> None:
         # Add drop shadow if enabled and allowed
@@ -579,13 +614,17 @@ class PlaneswalkerBorderlessVector(
                 self.text_layer_static,
                 self.text_layer_colon,
             ]:
-                self.set_font_color(layer, self.RGB_WHITE)
+                if layer:
+                    self.set_font_color(layer, self.RGB_WHITE)
 
         super().pw_text_layers()
 
-        self.text_layer_ability.visible = False
-        self.text_layer_static.visible = False
-        self.text_layer_colon.visible = False
+        if self.text_layer_ability:
+            self.text_layer_ability.visible = False
+        if self.text_layer_static:
+            self.text_layer_static.visible = False
+        if self.text_layer_colon:
+            self.text_layer_colon.visible = False
 
     def post_text_layers(self) -> None:
         # Add drop shadow if enabled and allowed
@@ -599,16 +638,19 @@ class PlaneswalkerBorderlessVector(
             self.textbox_size != LAYER_NAMES.PW3
             and self.is_transform
             and not self.is_front
+            and self.indicator_group
+            and isinstance((parent := self.indicator_group.parent), LayerSet)
         ):
             base_shape = psd.getLayer(
                 LAYERS.TYPE_LINE, [LAYERS.PINLINES, LAYERS.SHAPE, LAYER_NAMES.PW3]
             )
-            target_shape = psd.getLayer(LAYERS.TYPE_LINE, self.pinlines_shape)
-            delta = (
-                psd.get_layer_dimensions(target_shape)[Dimensions.CenterY]
-                - psd.get_layer_dimensions(base_shape)[Dimensions.CenterY]
-            )
-            self.indicator_group.parent.translate(0, delta)
+            target_shape = psd.getLayer(LAYERS.TYPE_LINE, self.pinlines_size_group)
+            if base_shape and target_shape:
+                delta = (
+                    psd.get_layer_dimensions(target_shape)["center_y"]
+                    - psd.get_layer_dimensions(base_shape)["center_y"]
+                )
+                parent.translate(0, delta)
 
     def rules_text_and_pt_layers(self) -> None:
         pass
@@ -618,14 +660,14 @@ class PlaneswalkerBorderlessVector(
     """
 
     @cached_property
-    def pinlines_arrow(self) -> Optional[ArtLayer]:
+    def pinlines_arrow(self) -> ArtLayer | None:
         return psd.getLayer(
             LAYER_NAMES.ARROW,
             [self.pinlines_group, LAYERS.SHAPE],
         )
 
     @cached_property
-    def textbox_pinlines_arrow(self) -> Optional[ArtLayer]:
+    def textbox_pinlines_arrow(self) -> ArtLayer | None:
         return psd.getLayer(
             LAYER_NAMES.ARROW,
             [self.pinlines_group, LAYERS.TEXTBOX],
@@ -635,7 +677,8 @@ class PlaneswalkerBorderlessVector(
         super().enable_transform_layers_front()
 
         for layer in [self.pinlines_arrow, self.textbox_pinlines_arrow]:
-            layer.visible = True
+            if layer:
+                layer.visible = True
 
     def text_layers_transform_front(self) -> None:
         super().text_layers_transform_front()
@@ -643,7 +686,8 @@ class PlaneswalkerBorderlessVector(
         # Use black text
         if self.is_authentic_front:
             for layer in [self.text_layer_name, self.text_layer_type]:
-                self.set_font_color(layer, self.RGB_BLACK)
+                if layer:
+                    self.set_font_color(layer, self.RGB_BLACK)
 
     def text_layers_transform_back(self):
         # No back side changes
@@ -659,7 +703,8 @@ class PlaneswalkerBorderlessVector(
         # Use black text
         if self.is_authentic_front:
             for layer in [self.text_layer_name, self.text_layer_type]:
-                self.set_font_color(layer, self.RGB_BLACK)
+                if layer:
+                    self.set_font_color(layer, self.RGB_BLACK)
 
     """
     UTIL METODS
