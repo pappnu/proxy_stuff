@@ -10,7 +10,7 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
 
 ## Requirements
 
-- A version of [Proxyshop](https://github.com/Investigamer/Proxyshop) that matches it's main-branch and has all of my pull requests merged to it (not all of them are vital, but this is the setup I test my plugin with). There's an [unofficial build](https://github.com/alex-taxiera/Proxyshop/releases) available that should fulfill this criteria.
+- A version of [Proxyshop](https://github.com/Investigamer/Proxyshop) that matches it's main-branch and has all of my pull requests merged to it (not all of them are vital, but this is the setup I test my plugin with). I provide [an unofficial development build of Proxyshop](https://github.com/pappnu/Proxyshop/releases) that fulfills this criteria.
 - Photoshop 23.5 or newer
 
 ## Installation
