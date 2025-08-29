@@ -93,8 +93,8 @@ class BackupAndRestore(BaseTemplate):
 
     def make_backup(self) -> bool:
         if self.layers_to_seek_masks_from or self.layers_to_copy:
-            template_doc = APP.activeDocument
-            backup_doc = APP.documents.add(
+            template_doc = APP.instance.activeDocument
+            backup_doc = APP.instance.documents.add(
                 width=template_doc.width, height=template_doc.height
             )
 
@@ -113,11 +113,11 @@ class BackupAndRestore(BaseTemplate):
                         )
                     ):
                         continue
-                    APP.activeDocument = template_doc
+                    APP.instance.activeDocument = template_doc
                     copy_layer(layer, relative_layer=default_backup_doc_layer)
 
             for layer in self.layers_to_seek_masks_from:
-                APP.activeDocument = template_doc
+                APP.instance.activeDocument = template_doc
                 if layer and has_layer_mask(layer):
                     temp_layer = template_doc.artLayers.add()
                     temp_layer.name = layer.name
@@ -126,11 +126,11 @@ class BackupAndRestore(BaseTemplate):
                         temp_layer, relative_layer=default_backup_doc_layer
                     )
                     temp_layer.remove()
-                    # APP.activeDocument = backup_doc
+                    # APP.instance.activeDocument = backup_doc
                     # bak_layer.name = layer.name
 
             if len(backup_doc.layers) > 1:
-                APP.activeDocument = backup_doc
+                APP.instance.activeDocument = backup_doc
                 default_backup_doc_layer.isBackgroundLayer = False
                 default_backup_doc_layer.remove()
 
@@ -140,7 +140,7 @@ class BackupAndRestore(BaseTemplate):
                 )
 
             backup_doc.close()
-            APP.activeDocument = template_doc
+            APP.instance.activeDocument = template_doc
 
             return True
         return False
@@ -168,8 +168,8 @@ class BackupAndRestore(BaseTemplate):
             initialdir=self.backup_directory,
             filetypes=filetypes,
         ):
-            template_doc = APP.activeDocument
-            backup_doc = APP.open(file)
+            template_doc = APP.instance.activeDocument
+            backup_doc = APP.instance.open(file)
 
             was_art_restored = False
 
@@ -178,14 +178,14 @@ class BackupAndRestore(BaseTemplate):
             art_layer_name = art_layer.name if art_layer else ""
             for layer in self.layers_to_copy:
                 if layer:
-                    APP.activeDocument = backup_doc
+                    APP.instance.activeDocument = backup_doc
                     if bak_layer := getLayer(layer.name):
                         layer_copy = copy_layer(
                             bak_layer,
                             relative_layer=layer,
                             insertion_location=ElementPlacement.PlaceBefore,
                         )
-                        APP.activeDocument = template_doc
+                        APP.instance.activeDocument = template_doc
                         layer_copy.name = layer.name
                         was_art_restored = layer.name == art_layer_name
                         # Merge is used here to work around the fact that we can't just
@@ -196,18 +196,18 @@ class BackupAndRestore(BaseTemplate):
             # Copy masks from backup
             for layer in self.layers_to_seek_masks_from:
                 if layer:
-                    APP.activeDocument = backup_doc
+                    APP.instance.activeDocument = backup_doc
                     if (bak_layer := getLayer(layer.name)) and has_layer_mask(
                         bak_layer
                     ):
                         temp_layer = copy_layer(bak_layer, relative_layer=layer)
-                        APP.activeDocument = template_doc
+                        APP.instance.activeDocument = template_doc
                         copy_layer_mask(temp_layer, layer)
                         temp_layer.remove()
                         apply_mask_to_layer_fx(layer)
 
             backup_doc.close()
-            APP.activeDocument = template_doc
+            APP.instance.activeDocument = template_doc
 
             return was_art_restored
         return False

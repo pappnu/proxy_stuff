@@ -64,7 +64,7 @@ def copy_selection_channels(source: Document, target: Document):
 
 
 def load_old_artwork(instance: BaseTemplate):
-    template_doc = APP.activeDocument
+    template_doc = APP.instance.activeDocument
 
     directory_path = "backup\\"
     initialfile = find_file_in_directory(
@@ -96,7 +96,7 @@ def load_old_artwork(instance: BaseTemplate):
         elif instance.art_layer:
             instance.art_layer.remove()
 
-        backup_doc = APP.open(file)
+        backup_doc = APP.instance.open(file)
         for (
             layer,
             preceding,

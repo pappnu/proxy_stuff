@@ -30,8 +30,6 @@ from src.utils.adobe import ReferenceLayer
 from .helpers import LAYER_NAMES, create_vector_mask_from_shape
 from .utils.path import subtract_front_shape
 
-sID = APP.stringIDToTypeID
-
 
 class PlaneswalkerBorderlessVector(
     VectorBorderlessMod,
@@ -721,13 +719,15 @@ class PlaneswalkerBorderlessVector(
 # TODO integrate into Proxyshop (maybe as an option for src.helpers.mask.apply_mask_to_layer_fx)
 def apply_vector_mask_to_layer_fx(layer: ArtLayer | LayerSet | None = None) -> None:
     if not layer:
-        layer = APP.activeDocument.activeLayer
+        layer = APP.instance.activeDocument.activeLayer
     ref = ActionReference()
-    ref.putIdentifier(sID("layer"), layer.id)
-    desc = APP.executeActionGet(ref)
-    layer_fx = desc.getObjectValue(sID("layerEffects"))
-    layer_fx.putBoolean(sID("vectorMaskAsGlobalMask"), True)
+    ref.putIdentifier(APP.instance.sID("layer"), layer.id)
+    desc = APP.instance.executeActionGet(ref)
+    layer_fx = desc.getObjectValue(APP.instance.sID("layerEffects"))
+    layer_fx.putBoolean(APP.instance.sID("vectorMaskAsGlobalMask"), True)
     desc = ActionDescriptor()
-    desc.putReference(sID("target"), ref)
-    desc.putObject(sID("to"), sID("layer"), layer_fx)
-    APP.executeAction(sID("set"), desc, DialogModes.DisplayNoDialogs)
+    desc.putReference(APP.instance.sID("target"), ref)
+    desc.putObject(APP.instance.sID("to"), APP.instance.sID("layer"), layer_fx)
+    APP.instance.executeAction(
+        APP.instance.sID("set"), desc, DialogModes.DisplayNoDialogs
+    )

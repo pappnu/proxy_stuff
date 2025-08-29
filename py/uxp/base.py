@@ -8,8 +8,6 @@ from photoshop.api import ActionDescriptor, DialogModes
 from src import APP
 from src._state import PATH
 
-sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
-
 
 def replace_last(string: str, old: str, new: str) -> str:
     old_idx = string.rfind(old)
@@ -20,8 +18,10 @@ def replace_last(string: str, old: str, new: str) -> str:
 
 def open_in_photoshop(path: Path | str):
     desc = ActionDescriptor()
-    desc.putPath(cID("null"), str(path))
-    APP.executeAction(sID("open"), desc, DialogModes.DisplayNoDialogs)
+    desc.putPath(APP.instance.cID("null"), str(path))
+    APP.instance.executeAction(
+        APP.instance.sID("open"), desc, DialogModes.DisplayNoDialogs
+    )
 
 
 class _UXPAccess:
@@ -64,7 +64,7 @@ class _UXPAccess:
         self.construct_script(script, data)
         open_in_photoshop(self.path_temp_script_absolute)
         # try:
-        #    APP.open(self.path_temp_script_absolute)
+        #    APP.instance.open(self.path_temp_script_absolute)
         # except COMError as err:
         #     # The open script operation errors even if the script executes successfully
         #     if "-2147213504," not in str(err):

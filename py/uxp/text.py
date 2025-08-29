@@ -158,12 +158,12 @@ def create_text_layer_with_path(
     select_layer(reference_path, make_visible=True)
 
     layer_path: Any = None
-    for path in APP.activeDocument.pathItems:
+    for path in APP.instance.activeDocument.pathItems:
         if path.name == f"{reference_path.name} Shape Path":
             layer_path = path
 
     if not layer_path:
-        layer_path = APP.activeDocument.pathItems[-1]
+        layer_path = APP.instance.activeDocument.pathItems[-1]
 
     points: list[PathPointDescriptor] = []
     for sub_path in layer_path.subPathItems:
@@ -294,7 +294,7 @@ def create_text_layer_with_path(
     }
     batch_play(desc)
 
-    created_layer = APP.activeDocument.activeLayer
+    created_layer = APP.instance.activeDocument.activeLayer
     if not isinstance(created_layer, ArtLayer):
         raise ValueError(
             "Failed to create shaped text layer. Active layer is unexpectedly not an ArtLayer."

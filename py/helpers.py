@@ -28,7 +28,6 @@ from src.helpers.layers import select_layer
 from src.helpers.selection import select_layer_pixels
 from src.schema.colors import ColorObject
 
-sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
 NO_DIALOG = DialogModes.DisplayNoDialogs
 
 
@@ -149,17 +148,17 @@ def find_art_layer(
 
 def copy():
     """Same as pressing Ctrl-C in Photoshop."""
-    APP.executeAction(cID("copy"), None, NO_DIALOG)
+    APP.instance.executeAction(APP.instance.cID("copy"), None, NO_DIALOG)
 
 
 def paste():
     """Same as pressing Ctrl-V in Photoshop."""
-    APP.executeAction(cID("past"), None, NO_DIALOG)
+    APP.instance.executeAction(APP.instance.cID("past"), None, NO_DIALOG)
 
 
 def delete():
     """Same as pressing Del in Photoshop."""
-    APP.executeAction(cID("Dlt "), None, NO_DIALOG)
+    APP.instance.executeAction(APP.instance.cID("Dlt "), None, NO_DIALOG)
 
 
 def create_art_layer(
@@ -167,7 +166,7 @@ def create_art_layer(
     relative_layer: ArtLayer | LayerSet | None = None,
     insertion_location: ElementPlacement = ElementPlacement.PlaceBefore,
 ) -> ArtLayer:
-    new_layer = APP.activeDocument.artLayers.add()
+    new_layer = APP.instance.activeDocument.artLayers.add()
     if name is not None:
         new_layer.name = name
     if relative_layer:
@@ -196,24 +195,30 @@ def flip_layer(layer: ArtLayer | LayerSet, direction: FlipDirection):
     layer.visible = True
     select_layer(layer)
     desc = ActionDescriptor()
-    desc.putEnumerated(cID("Axis"), cID("Ornt"), cID(direction))
-    APP.executeAction(cID("Flip"), desc, NO_DIALOG)
+    desc.putEnumerated(
+        APP.instance.cID("Axis"), APP.instance.cID("Ornt"), APP.instance.cID(direction)
+    )
+    APP.instance.executeAction(APP.instance.cID("Flip"), desc, NO_DIALOG)
 
 
 # https://community.adobe.com/t5/photoshop-ecosystem-discussions/check-if-layer-has-mask/m-p/3702981
 def has_layer_mask(layer: ArtLayer | LayerSet) -> bool:
     ref = ActionReference()
-    ref.putName(cID("Lyr "), layer.name)
-    return APP.executeActionGet(ref).getBoolean(sID("hasUserMask"))
+    ref.putName(APP.instance.cID("Lyr "), layer.name)
+    return APP.instance.executeActionGet(ref).getBoolean(
+        APP.instance.sID("hasUserMask")
+    )
 
 
 def create_clipping_mask(layer: ArtLayer):
     select_layer(layer)
     desc1 = ActionDescriptor()
     ref1 = ActionReference()
-    ref1.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
-    desc1.putReference(cID("null"), ref1)
-    APP.executeAction(sID("groupEvent"), desc1, NO_DIALOG)
+    ref1.putEnumerated(
+        APP.instance.cID("Lyr "), APP.instance.cID("Ordn"), APP.instance.cID("Trgt")
+    )
+    desc1.putReference(APP.instance.cID("null"), ref1)
+    APP.instance.executeAction(APP.instance.sID("groupEvent"), desc1, NO_DIALOG)
 
 
 def select_tool(tool: Literal["pathComponentSelectTool", "removeTool"]):
@@ -222,10 +227,10 @@ def select_tool(tool: Literal["pathComponentSelectTool", "removeTool"]):
     """
     desc = ActionDescriptor()
     ref = ActionReference()
-    ref.putClass(sID(tool))
-    desc.putReference(cID("null"), ref)
-    desc.putBoolean(sID("dontRecord"), True)
-    APP.executeAction(cID("slct"), desc, NO_DIALOG)
+    ref.putClass(APP.instance.sID(tool))
+    desc.putReference(APP.instance.cID("null"), ref)
+    desc.putBoolean(APP.instance.sID("dontRecord"), True)
+    APP.instance.executeAction(APP.instance.cID("slct"), desc, NO_DIALOG)
 
 
 def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
@@ -248,26 +253,34 @@ def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
 def deselect_all_layers() -> None:
     desc = ActionDescriptor()
     ref = ActionReference()
-    ref.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
-    desc.putReference(cID("null"), ref)
-    APP.executeAction(sID("selectNoLayers"), desc, NO_DIALOG)
+    ref.putEnumerated(
+        APP.instance.cID("Lyr "), APP.instance.cID("Ordn"), APP.instance.cID("Trgt")
+    )
+    desc.putReference(APP.instance.cID("null"), ref)
+    APP.instance.executeAction(APP.instance.sID("selectNoLayers"), desc, NO_DIALOG)
 
 
 def rasterize_layer_style(layer: ArtLayer | LayerSet) -> None:
     select_layer(layer)
-    idrasterizeLayer = sID("rasterizeLayer")
+    idrasterizeLayer = APP.instance.sID("rasterizeLayer")
     desc = ActionDescriptor()
     ref = ActionReference()
-    ref.putEnumerated(cID("Lyr "), cID("Ordn"), cID("Trgt"))
-    desc.putReference(cID("null"), ref)
-    desc.putEnumerated(cID("What"), sID("rasterizeItem"), sID("layerStyle"))
-    APP.executeAction(idrasterizeLayer, desc, NO_DIALOG)
+    ref.putEnumerated(
+        APP.instance.cID("Lyr "), APP.instance.cID("Ordn"), APP.instance.cID("Trgt")
+    )
+    desc.putReference(APP.instance.cID("null"), ref)
+    desc.putEnumerated(
+        APP.instance.cID("What"),
+        APP.instance.sID("rasterizeItem"),
+        APP.instance.sID("layerStyle"),
+    )
+    APP.instance.executeAction(idrasterizeLayer, desc, NO_DIALOG)
 
 
 def manual_fill(
     console: GUIConsole | TerminalConsole, event: Event, layer: ArtLayer | None = None
 ) -> None:
-    docref = APP.activeDocument
+    docref = APP.instance.activeDocument
     if layer:
         docref.activeLayer = layer
 

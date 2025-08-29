@@ -20,8 +20,6 @@ from src.schema.colors import ColorObject
 from ..uxp.path import PathPointConf, create_path
 from .layer_fx import get_stroke_details
 
-sID, cID = APP.stringIDToTypeID, APP.charIDToTypeID
-
 
 def get_layer_path(layer: ArtLayer) -> tuple[Any, bool]:
     visible_state = bool(layer.visible)
@@ -30,7 +28,7 @@ def get_layer_path(layer: ArtLayer) -> tuple[Any, bool]:
 
     layer_path: Any = None
     fallback: Any = None
-    paths: Iterable[Any] = APP.activeDocument.pathItems
+    paths: Iterable[Any] = APP.instance.activeDocument.pathItems
     for path in paths:
         if (
             path.name == f"{layer.name} Shape Path"
@@ -75,7 +73,7 @@ def get_shape_dimensions(layer: ArtLayer) -> LayerDimensions:
     bounds to calculate the dimensions."""
     layer_path, visible_state = get_layer_path(layer)
     layer_path.makeSelection()
-    doc = APP.activeDocument
+    doc = APP.instance.activeDocument
     dims = get_dimensions_from_bounds(doc.selection.bounds)
     doc.selection.deselect()
     layer.visible = visible_state
@@ -91,7 +89,7 @@ def create_shape_layer(
     color: ColorObject | None = None,
 ) -> ArtLayer:
     solid_color = get_color(color) if color else rgb_black()
-    docref = APP.activeDocument
+    docref = APP.instance.activeDocument
 
     create_path(points)
 
@@ -101,15 +99,19 @@ def create_shape_layer(
     desc2 = ActionDescriptor()
     desc3 = ActionDescriptor()
     desc4 = ActionDescriptor()
-    ref1.putClass(sID("contentLayer"))
-    desc1.putReference(sID("target"), ref1)
-    desc4.putDouble(sID("red"), solid_color.rgb.red)
-    desc4.putDouble(sID("green"), solid_color.rgb.green)
-    desc4.putDouble(sID("blue"), solid_color.rgb.blue)
-    desc3.putObject(sID("color"), sID("RGBColor"), desc4)
-    desc2.putObject(sID("type"), sID("solidColorLayer"), desc3)
-    desc1.putObject(sID("using"), sID("contentLayer"), desc2)
-    APP.executeAction(sID("make"), desc1, DialogModes.DisplayNoDialogs)
+    ref1.putClass(APP.instance.sID("contentLayer"))
+    desc1.putReference(APP.instance.sID("target"), ref1)
+    desc4.putDouble(APP.instance.sID("red"), solid_color.rgb.red)
+    desc4.putDouble(APP.instance.sID("green"), solid_color.rgb.green)
+    desc4.putDouble(APP.instance.sID("blue"), solid_color.rgb.blue)
+    desc3.putObject(APP.instance.sID("color"), APP.instance.sID("RGBColor"), desc4)
+    desc2.putObject(
+        APP.instance.sID("type"), APP.instance.sID("solidColorLayer"), desc3
+    )
+    desc1.putObject(APP.instance.sID("using"), APP.instance.sID("contentLayer"), desc2)
+    APP.instance.executeAction(
+        APP.instance.sID("make"), desc1, DialogModes.DisplayNoDialogs
+    )
 
     layer = docref.activeLayer
     if not isinstance(layer, ArtLayer):
@@ -137,10 +139,16 @@ def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:
     select_layers([shape_1, shape_2])
 
     desc = ActionDescriptor()
-    desc.putEnumerated(sID("shapeOperation"), sID("shapeOperation"), cID("Sbtr"))
-    APP.executeAction(cID("Mrg2"), desc, DialogModes.DisplayNoDialogs)
+    desc.putEnumerated(
+        APP.instance.sID("shapeOperation"),
+        APP.instance.sID("shapeOperation"),
+        APP.instance.cID("Sbtr"),
+    )
+    APP.instance.executeAction(
+        APP.instance.cID("Mrg2"), desc, DialogModes.DisplayNoDialogs
+    )
 
-    active_layer = APP.activeDocument.activeLayer
+    active_layer = APP.instance.activeDocument.activeLayer
     if not isinstance(active_layer, ArtLayer):
         raise ValueError(
             "Failed to subtract front shape. Active layer is unexpectedly not an ArtLayer."
@@ -149,7 +157,7 @@ def subtract_front_shape(shape_1: ArtLayer, shape_2: ArtLayer) -> ArtLayer:
 
 
 def check_layer_overlap_with_shape(layer: ArtLayer, ref: ArtLayer):
-    selection = APP.activeDocument.selection
+    selection = APP.instance.activeDocument.selection
     dims = get_shape_dimensions(ref)
     ref_bounds = (dims["left"], dims["top"], dims["right"], dims["bottom"])
     select_bounds(ref_bounds, selection=selection)

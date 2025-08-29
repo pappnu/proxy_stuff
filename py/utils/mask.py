@@ -19,7 +19,7 @@ def copy_to_mask(
     target: ArtLayer | LayerSet,
     source: ArtLayer | LayerSet | None = None,
 ):
-    docref = APP.activeDocument
+    docref = APP.instance.activeDocument
     if source:
         docref.activeLayer = source
     docsel = docref.selection
