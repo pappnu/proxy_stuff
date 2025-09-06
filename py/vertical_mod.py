@@ -8,6 +8,7 @@ from src import CFG
 from src.enums.layers import LAYERS
 from src.enums.settings import BorderlessColorMode
 from src.helpers.colors import get_pinline_gradient, rgb_white
+from src.helpers.effects import disable_layer_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.helpers.masks import (
     apply_mask,
@@ -48,11 +49,6 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # endregion settings
 
     # region Checks
-
-    # TODO remove this once is_layout_saga has been marked as property on Proxyshop's side
-    @cached_property
-    def is_layout_saga(self) -> bool:
-        return isinstance(self.layout, SagaLayout)
 
     @cached_property
     def is_vertical_layout(self) -> bool:
@@ -169,6 +165,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 self.text_layer_ability_bottom = create_text_layer_with_path(
                     text_shape, reference_text=self.text_layer_ability
                 )
+                disable_layer_fx(self.text_layer_ability_bottom)
                 self.text_layer_ability_bottom.move(
                     relativeObject=self.text_layer_ability,
                     insertionLocation=ElementPlacement.PlaceAfter,
@@ -466,6 +463,12 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def vertical_pinlines_shape(self) -> ArtLayer | None:
         raise ValueError("Vertical pinlines shape hasn't been built yet.")
 
+    @cached_property
+    def textbox_transform_front_addition_shape(self) -> ArtLayer | None:
+        if self.is_vertical_layout:
+            return None
+        return super().textbox_transform_front_addition_shape
+
     # endregion Shapes
 
     # region Color Maps
@@ -503,7 +506,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             "Hybrid": "#a79c8e",
             "Artifact": "#4f6b7d",
             "Colorless": "#74726b",
-            "Vehicle": "#4c3314",
+            "Vehicle": "#885a40",
         }
 
     @cached_property
@@ -532,6 +535,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             "G": "#185231",
             "Gold": "#87693f",
             "Artifact": "#365d6b",
+            "Vehicle": "#684333",
         }
 
     # endregion Color Maps

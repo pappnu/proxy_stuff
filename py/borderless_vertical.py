@@ -202,7 +202,7 @@ class BorderlessVertical(VerticalMod):
 
             # The inner and outer parts of the PT box require different colors
             if self.pt_shape:
-                self.generate_layer(group=self.pt_shape, colors=self.pinlines_colors)
+                self.generate_layer(group=self.pt_shape, colors=self.pt_colors)
             if self.pt_inner_shape:
                 self.generate_layer(
                     group=self.pt_inner_shape, colors=self.pt_inner_colors
