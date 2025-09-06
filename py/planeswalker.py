@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import cached_property
 
 from photoshop.api import (
@@ -637,7 +637,6 @@ class PlaneswalkerBorderlessVector(
             and self.is_transform
             and not self.is_front
             and self.indicator_group
-            and isinstance((parent := self.indicator_group.parent), LayerSet)
         ):
             base_shape = psd.getLayer(
                 LAYERS.TYPE_LINE, [LAYERS.PINLINES, LAYERS.SHAPE, LAYER_NAMES.PW3]
@@ -648,10 +647,14 @@ class PlaneswalkerBorderlessVector(
                     psd.get_layer_dimensions(target_shape)["center_y"]
                     - psd.get_layer_dimensions(base_shape)["center_y"]
                 )
-                parent.translate(0, delta)
+                self.indicator_group.translate(0, delta)
 
     def rules_text_and_pt_layers(self) -> None:
         pass
+
+    @cached_property
+    def post_text_methods(self) -> list[Callable[[], None]]:
+        return [*super().post_text_methods, self.post_text_layers]
 
     """
     TRANSFORM
