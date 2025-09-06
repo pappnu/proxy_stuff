@@ -1,5 +1,5 @@
 from _ctypes import COMError
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict, Unpack
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -149,10 +149,18 @@ class MakeTextLayerActionDescriptor(ActionDescriptor):
     using: TextLayerDescriptor
 
 
+class CreateTextLayerWithPathOptions(TypedDict):
+    color: NotRequired[SolidColor]
+    size: NotRequired[float]
+    leading: NotRequired[float]
+
+
 # leftDirection -> forward
 # rightDirection -> backward
 def create_text_layer_with_path(
-    reference_path: ArtLayer, reference_text: ArtLayer, color: SolidColor | None = None
+    reference_path: ArtLayer,
+    reference_text: ArtLayer,
+    **kwargs: Unpack[CreateTextLayerWithPathOptions],
 ) -> ArtLayer:
     """Creates a shaped text layer, which aims to mimic the properties of reference_text layer."""
     select_layer(reference_path, make_visible=True)
@@ -208,13 +216,20 @@ def create_text_layer_with_path(
     reference_path.visible = False
 
     ref_text = reference_text.textItem
-    color = color if color else ref_text.color
+    color = kwargs.get("color", ref_text.color)
+    size = kwargs.get("size", ref_text.size)
+    leading = kwargs.get("leading", ref_text.leading)
     desc: MakeTextLayerActionDescriptor = {
         "_obj": "make",
         "_target": [{"_ref": "textLayer"}],
         "using": {
             "_obj": "textLayer",
-            "textKey": "text",
+            # If initially empty text is replaced later on that seems
+            # to mess up the text size and leading values. At least in my case
+            # when rendering a Showcase Adventure card they became very small (< 1 pt).
+            # We don't want to use placeholder text either as sometimes no text might
+            # be assigned to the layer. Whitespace seems to be an acceptable workaround.
+            "textKey": " ",  # text contents
             "textStyleRange": [
                 {
                     "_obj": "textStyleRange",
@@ -231,12 +246,12 @@ def create_text_layer_with_path(
                         "fontPostScriptName": ref_text.font,
                         "size": {
                             "_unit": "pointsUnit",
-                            "_value": ref_text.size,
+                            "_value": size,
                         },
                         "autoLeading": bool(ref_text.useAutoLeading),
                         "leading": {
                             "_unit": "pointsUnit",
-                            "_value": float(ref_text.leading),
+                            "_value": leading,
                         },
                         "autoKern": {
                             "_enum": "autoKern",

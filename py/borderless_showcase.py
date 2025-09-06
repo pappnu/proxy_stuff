@@ -8,6 +8,10 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
+from plugins.proxy_stuff.py.utils.colors import (
+    create_gradient_config,
+    create_gradient_location_map,
+)
 from src import CFG
 from src.cards import strip_reminder_text
 from src.enums.layers import LAYERS
@@ -72,7 +76,7 @@ from .utils.path import check_layer_overlap_with_shape, create_shape_layer
 from .utils.text import align_dimension
 from .uxp.path import PathPointConf
 from .uxp.shape import ShapeOperation, merge_shapes
-from .uxp.text import create_text_layer_with_path
+from .uxp.text import CreateTextLayerWithPathOptions, create_text_layer_with_path
 from .vertical_mod import VerticalMod
 
 
@@ -119,6 +123,10 @@ class BorderlessShowcase(
             BorderlessTextbox.Medium: 866,
             BorderlessTextbox.Short: 661,
         }
+
+    @cached_property
+    def rules_text_default_options(self) -> CreateTextLayerWithPathOptions:
+        return {"size": 9, "leading": 9}
 
     # region Constants
 
@@ -463,6 +471,21 @@ class BorderlessShowcase(
     # region Colors
 
     @cached_property
+    def pinlines_color_map_override(self) -> dict[str, ColorObject]:
+        if override := self.pinlines_color_override:
+            color_map: dict[str, ColorObject] = {}
+            for idx, color in enumerate(override):
+                color_map[str(idx)] = color
+            return color_map
+        return self.pinlines_color_map
+
+    @cached_property
+    def pinlines_color_identity_override(self) -> str:
+        if self.pinlines_color_override:
+            return "".join(self.pinlines_color_map_override.keys())
+        return self.identity
+
+    @cached_property
     def pt_colors(
         self,
     ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
@@ -474,29 +497,20 @@ class BorderlessShowcase(
     def pinlines_colors(
         self,
     ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
-        if override := self.pinlines_color_override:
-            colors = ""
-            color_map: dict[str, SolidColor] = {}
-            for idx, color in enumerate(override):
-                i = str(idx)
-                colors += i
-                color_map[i] = color
-
-            location_map: dict[int, list[int | float]] | None = None
-            if (steps := len(colors)) > 5:
-                gradient_end_location = 1 - self._gradient_start_location
-                locations: list[int | float] = [self._gradient_start_location]
-                steps_between = (steps - 2) * 2 + 1
-                step = (gradient_end_location - self._gradient_start_location) / (
-                    (steps - 2) * 2 + 1
+        if self.pinlines_color_override:
+            location_map: dict[int, list[int | float]] | None = (
+                create_gradient_location_map(
+                    steps,
+                    self._gradient_start_location,
+                    1 - self._gradient_start_location,
                 )
-                for i in range(steps_between - 1):
-                    locations.append(locations[i] + step)
-                locations.append(gradient_end_location)
-                location_map = {steps: locations}
-
+                if (steps := len(self.pinlines_color_identity_override)) > 5
+                else None
+            )
             return get_pinline_gradient(
-                colors=colors, color_map=color_map, location_map=location_map
+                colors=self.pinlines_color_identity_override,
+                color_map=self.pinlines_color_map_override,
+                location_map=location_map,
             )
         return super().pinlines_colors
 
@@ -561,21 +575,21 @@ class BorderlessShowcase(
         return super().type_reference
 
     @cached_property
+    def pt_reference_base(self) -> ReferenceLayer | None:
+        return super().pt_reference
+
+    @cached_property
     def pt_reference(self) -> ReferenceLayer | None:
         if self.is_battle:
             return get_reference_layer(
                 f"{LAYERS.PT_REFERENCE} - {LAYER_NAMES.BATTLE}", self.text_group
             )
-        return super().pt_reference
 
-    @cached_property
-    def pt_text_reference(self) -> ReferenceLayer | None:
-        """Offsets PT box and flipside PT text."""
         refs: list[ArtLayer] = []
 
-        if self.is_creature and self.pt_reference:
-            duplicate = self.pt_reference.duplicate(
-                self.pt_reference, ElementPlacement.PlaceAfter
+        if self.is_creature and self.pt_reference_base:
+            duplicate = self.pt_reference_base.duplicate(
+                self.pt_reference_base, ElementPlacement.PlaceAfter
             )
             duplicate.visible = False
             refs.append(duplicate)
@@ -804,6 +818,8 @@ class BorderlessShowcase(
                     {"x": dims["left"], "y": dims["bottom"]},
                 ],
                 hide=True,
+                relative_layer=self.textbox_reference_group,
+                placement=ElementPlacement.PlaceInside,
             )
 
         if ref:
@@ -1105,10 +1121,10 @@ class BorderlessShowcase(
             self.size != LAYERS.TEXTLESS
             and (self.is_creature or self.has_flipside_pt)
             and layer
-            and self.pt_text_reference
-            and self.textbox_reference_base
+            and self.pt_reference
+            and self.textbox_reference
         ):
-            base_dims = get_layer_dimensions(self.textbox_reference_base)
+            base_dims = get_layer_dimensions(self.textbox_reference)
             textbox_ref_shape = create_shape_layer(
                 (
                     {"x": base_dims["left"], "y": base_dims["top"]},
@@ -1116,17 +1132,22 @@ class BorderlessShowcase(
                     {"x": base_dims["right"], "y": self.doc_height},
                     {"x": base_dims["left"], "y": self.doc_height},
                 ),
-                relative_layer=self.textbox_reference_base,
+                relative_layer=self.textbox_reference,
                 placement=ElementPlacement.PlaceBefore,
             )
             textbox_ref_shape = merge_shapes(
-                self.pt_text_reference.duplicate(
+                self.pt_reference.duplicate(
                     textbox_ref_shape, ElementPlacement.PlaceBefore
                 ),
                 textbox_ref_shape,
                 operation=ShapeOperation.SubtractFront,
             )
-            layer = create_text_layer_with_path(textbox_ref_shape, layer)
+            # The Photoshop API can give incorrect text size when accessed initially (?),
+            # though assigning a new size works as expected, e.g., actual size is 9 PT,
+            # API returns 5.9, but assigning 11 makes the size 11 PT.
+            layer = create_text_layer_with_path(
+                textbox_ref_shape, layer, **self.rules_text_default_options
+            )
         return layer
 
     @cached_property
@@ -1260,7 +1281,7 @@ class BorderlessShowcase(
         color: SolidColor,
         offset_shape: ArtLayer | None = None,
     ) -> ArtLayer:
-        offset_shape = offset_shape or self.pt_text_reference
+        offset_shape = offset_shape or self.pt_reference
 
         text_ref_shape = create_shape_layer(
             points,
@@ -1359,10 +1380,12 @@ class BorderlessShowcase(
             alignment_dimension = "center_y"
 
         # Apply shape to the text that offsets PT elements but allows overflow at bottom
-        if self.requires_text_shaping and self.pt_text_reference:
+        if self.requires_text_shaping and self.pt_reference:
             dims_initial_shape = get_layer_dimensions_via_rasterization(shaped_text)
             min_pt_top = (
-                self.pt_reference.dims["top"] if self.pt_reference else self.doc_height
+                self.pt_reference_base.dims["top"]
+                if self.pt_reference_base
+                else self.doc_height
             )
             top = min(
                 dims_initial_shape["top"],
@@ -1449,10 +1472,10 @@ class BorderlessShowcase(
 
                 # Text might overlap with the PT box after alignment
                 if (
-                    self.pt_text_reference
+                    self.pt_reference
                     and (
                         delta := check_layer_overlap_with_shape(
-                            shaped_text, self.pt_text_reference
+                            shaped_text, self.pt_reference
                         )
                     )
                     < 0
@@ -1818,14 +1841,39 @@ class BorderlessShowcase(
 
     # region Adventure
 
+    @cached_property
+    def adventure_pinlines_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
+        if isinstance(self.layout, AdventureLayout) and self.adventure_pinlines:
+            adventure_pinline_dims = get_layer_dimensions(self.adventure_pinlines)
+            proportional_pinlines_width = (
+                adventure_pinline_dims["width"] / self.doc_width
+            )
+            gradient_start_offset = (
+                proportional_pinlines_width
+                / (len(self.layout.color_identity_adventure) + 1)
+                - proportional_pinlines_width * 0.05
+            )
+            return create_gradient_config(
+                "".join(self.layout.color_identity_adventure),
+                self.pinlines_color_map,
+                adventure_pinline_dims["left"] / self.doc_width + gradient_start_offset,
+                adventure_pinline_dims["right"] / self.doc_width
+                - gradient_start_offset,
+            )
+        return (0, 0, 0)
+
+    @cached_property
+    def adventure_pinlines(self) -> ArtLayer | None:
+        return getLayer(LAYERS.ADVENTURE, self.adventure_pinlines_group)
+
     def enable_adventure_layers(self) -> None:
         if isinstance(self.layout, AdventureLayout) and self.adventure_pinlines_group:
             self.adventure_pinlines_group.visible = True
             self.generate_layer(
                 group=self.adventure_pinlines_group,
-                colors=self.pinlines_color_map.get(
-                    "".join(self.layout.color_identity_adventure), (0, 0, 0)
-                ),
+                colors=self.adventure_pinlines_colors,
             )
 
     def text_layers_adventure(self) -> None:
@@ -2272,14 +2320,8 @@ class BorderlessShowcase(
                     text_area.execute()
 
         # Move Prototype elements on top of normal rules text
-        if (
-            self.textbox_reference
-            and self.prototype_group
-            and self.prototype_pt_group
-        ):
-            pt_dims = get_layer_dimensions_via_rasterization(
-                self.prototype_pt_group
-            )
+        if self.textbox_reference and self.prototype_group and self.prototype_pt_group:
+            pt_dims = get_layer_dimensions_via_rasterization(self.prototype_pt_group)
             ref_dims = self.textbox_reference.dims
             delta = ref_dims["top"] - pt_dims["bottom"]
             self.prototype_group.translate(0, delta)
