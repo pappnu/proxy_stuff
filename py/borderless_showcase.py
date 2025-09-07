@@ -50,6 +50,7 @@ from src.schema.colors import ColorObject, GradientColor, GradientConfig
 from src.templates._vector import MaskAction
 from src.templates.adventure import AdventureMod
 from src.templates.leveler import LevelerMod
+from src.templates.normal import BorderlessVectorTemplate
 from src.templates.planeswalker import PlaneswalkerMod
 from src.templates.saga import SagaMod
 from src.templates.split import SplitMod
@@ -1680,7 +1681,7 @@ class BorderlessShowcase(
                 self.text_layer_rules_base.visible = False
             return
 
-        super().rules_text_and_pt_layers()
+        super(BorderlessVectorTemplate, self).rules_text_and_pt_layers()
 
         if self.supports_dynamic_textbox_height:
             if self.rules_text_font_size:
