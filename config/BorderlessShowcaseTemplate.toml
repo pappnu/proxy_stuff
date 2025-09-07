@@ -96,7 +96,7 @@ default = 0.0
 
 [TEXT."Rules.Text.Padding"]
 title = "Rules text vertical padding"
-desc = "The amount of extra vertical padding in pixels to add to rules text. Applies to Planeswalker cards and to other cards when using 'Rules text font size' setting."
+desc = "The amount of extra vertical padding in pixels to add to rules text. Applies if 'Rules text font size' setting is set or if the rendered card is a Planeswalker."
 type = "numeric"
 default = 64.0
 
