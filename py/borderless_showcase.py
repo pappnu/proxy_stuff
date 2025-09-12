@@ -8,10 +8,6 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
-from plugins.proxy_stuff.py.utils.colors import (
-    create_gradient_config,
-    create_gradient_location_map,
-)
 from src import CFG
 from src.cards import strip_reminder_text
 from src.enums.layers import LAYERS
@@ -70,6 +66,10 @@ from .helpers import (
     get_numeric_setting,
     is_color_identity,
     parse_hex_color_list,
+)
+from .utils.colors import (
+    create_gradient_config,
+    create_gradient_location_map,
 )
 from .utils.layer import get_layer_dimensions_via_rasterization
 from .utils.layer_fx import get_stroke_details
@@ -600,6 +600,51 @@ class BorderlessShowcase(
         ):
             refs.append(layer)
 
+            # Reserve space for flipide PT text
+            if self.text_layer_flipside_pt:
+                # Format flipside PT text
+                for idx, txt in enumerate(reversed(self.text)):
+                    if txt.layer is self.text_layer_flipside_pt:
+                        self.text.pop(idx)
+                        if txt.validate():
+                            txt.execute()
+
+                # Create a shape that encompasses flipside PT text
+                flipside_ref_dims = get_layer_dimensions(layer)
+                flipside_pt_dims = get_layer_dimensions_via_rasterization(
+                    self.text_layer_flipside_pt
+                )
+                rules_stroke_size = (
+                    (get_stroke_details(self.text_layer_rules_base) or {}).get(
+                        "size", 0
+                    )
+                    if self.text_layer_rules_base
+                    else 0
+                )
+                padded_left = flipside_pt_dims["left"] - rules_stroke_size
+                padded_top = flipside_pt_dims["top"] - rules_stroke_size
+                refs.append(
+                    create_shape_layer(
+                        (
+                            {
+                                "x": padded_left,
+                                "y": padded_top,
+                            },
+                            {"x": flipside_ref_dims["right"], "y": padded_top},
+                            {
+                                "x": flipside_ref_dims["right"],
+                                "y": flipside_ref_dims["bottom"],
+                            },
+                            {
+                                "x": padded_left,
+                                "y": flipside_ref_dims["bottom"],
+                            },
+                        ),
+                        relative_layer=layer,
+                        placement=ElementPlacement.PlaceAfter,
+                    )
+                )
+
         if refs:
             if len(refs) > 1:
                 merged = merge_shapes(*refs, operation=ShapeOperation.Unite)
@@ -880,6 +925,10 @@ class BorderlessShowcase(
                     hide=True,
                 )
             )
+
+    @cached_property
+    def textless_bottom_reference_layer(self) -> ReferenceLayer | None:
+        return get_reference_layer(LAYERS.TEXTLESS, self.textbox_reference_group)
 
     # endregion Reference Layers
 
@@ -1268,7 +1317,7 @@ class BorderlessShowcase(
         text_field = FormattedTextField(
             layer=layer,
             contents=oracle_text,
-            flavor=flavor_text or "",
+            flavor=flavor_text,
             divider=divider_layer,
         )
         if not text_field.validate():
@@ -1316,6 +1365,12 @@ class BorderlessShowcase(
         vertical_padding: tuple[float | int, float | int] | None = None,
     ) -> tuple[ArtLayer, ReferenceLayer] | None:
         """Calculates the required size for rules textbox when the rules text has a fixed font size."""
+        if not oracle_text + (flavor_text or ""):
+            return (
+                base_text_layer,
+                self.textless_bottom_reference_layer or base_textbox_reference,
+            )
+
         min_top = min_top if min_top is not None else self.doc_height
         vertical_padding = (
             vertical_padding
@@ -1485,7 +1540,7 @@ class BorderlessShowcase(
                         shaped_text
                     )
 
-                    top = dims_text_ref_shape["top"] - delta - vertical_padding[1]
+                    top = dims_text_ref_shape["top"] + delta - vertical_padding[1]
 
                     shaped_text.remove()
                     shaped_text = self.create_offset_text_shape(
@@ -1601,8 +1656,12 @@ class BorderlessShowcase(
         # First pass of sizing
         for idx, arg in enumerate(textbox_args_sorted):
             height_padding = arg.get("height_padding", 0) or 0
+            arg["base_text_layer"].visible = False
+            base_text_layer_copy = arg["base_text_layer"].duplicate(
+                arg["base_text_layer"], ElementPlacement.PlaceBefore
+            )
             sized = self.adjust_textbox_for_font_size(
-                base_text_layer=arg["base_text_layer"],
+                base_text_layer=base_text_layer_copy,
                 base_textbox_reference=arg["base_textbox_reference"],
                 base_text_wrap_reference=arg["base_text_wrap_reference"],
                 divider_layer=arg["divider_layer"],
@@ -1619,6 +1678,7 @@ class BorderlessShowcase(
             # other layer seems to fix it without causing side effects.
             if self.art_layer:
                 select_layer(self.art_layer)
+            base_text_layer_copy.remove()
             if sized:
                 sizes.append(sized)
                 if (
@@ -1646,8 +1706,11 @@ class BorderlessShowcase(
             layer.remove()
             ref.remove()
             min_top = tallest_top + height_padding
+            base_text_layer_copy = arg["base_text_layer"].duplicate(
+                arg["base_text_layer"], ElementPlacement.PlaceBefore
+            )
             sized = self.adjust_textbox_for_font_size(
-                base_text_layer=arg["base_text_layer"],
+                base_text_layer=base_text_layer_copy,
                 base_textbox_reference=arg["base_textbox_reference"],
                 base_text_wrap_reference=arg["base_text_wrap_reference"],
                 divider_layer=arg["divider_layer"],
@@ -1656,6 +1719,10 @@ class BorderlessShowcase(
                 min_top=min_top,
                 align_to=min_top + (tallest_height - height_padding) / 2,
             )
+            # Same reference layer turning visible bug as above.
+            if self.art_layer:
+                select_layer(self.art_layer)
+            base_text_layer_copy.remove()
             if sized:
                 sizes[orig_idx] = sized
             else:
@@ -1672,15 +1739,20 @@ class BorderlessShowcase(
         text_area.fix_overflow_width = False
 
     def rules_text_and_pt_layers(self) -> None:
-        if self.is_split and self.rules_text_font_size:
-            # Split cards don't have PT text and rules text is already adjusted elsewhere
-            return
+        if self.is_split:
+            if self.rules_text_font_size:
+                # Split cards don't have PT text and rules text is already adjusted elsewhere
+                return
+            return super().rules_text_and_pt_layers()
 
         if self.is_planeswalker:
             if self.text_layer_rules_base:
                 self.text_layer_rules_base.visible = False
             return
 
+        # Ensure that sizing logic associated with fixed font size runs before
+        # accessing the rules text layer
+        self.textbox_reference
         super(BorderlessVectorTemplate, self).rules_text_and_pt_layers()
 
         if self.supports_dynamic_textbox_height:
@@ -1741,7 +1813,7 @@ class BorderlessShowcase(
                 ref.dims["top"] -= self.rules_text_padding / 2
             else:
                 ref = (
-                    get_reference_layer(LAYERS.TEXTLESS, self.textbox_reference_group)
+                    self.textless_bottom_reference_layer
                     if self.is_vertical_layout
                     else self.textbox_reference
                 )
@@ -1923,7 +1995,9 @@ class BorderlessShowcase(
                         },
                     )
                     if text_area.validate():
-                        text_area.execute()
+                        # It's enough to reposition the text since it's already formatted.
+                        # Reformatting actually breaks the styling of the text.
+                        text_area.position_within_reference()
                     break
 
     # endregion Adventure

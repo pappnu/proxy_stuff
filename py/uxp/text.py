@@ -219,6 +219,16 @@ def create_text_layer_with_path(
     color = kwargs.get("color", ref_text.color)
     size = kwargs.get("size", ref_text.size)
     leading = kwargs.get("leading", ref_text.leading)
+    try:
+        space_after = ref_text.spaceAfter
+        space_before = ref_text.spaceBefore
+    except COMError:
+        # Hacky workaround to a value retrieval issue with an unknown cause.
+        # This was observed on a duplicated text layer when accessing spaceAfter.
+        # https://community.adobe.com/t5/photoshop-ecosystem-discussions/textitem-color-returns-quot-general-photoshop-error-quot/m-p/10900372#M303432
+        ref_text.contents = ref_text.contents
+        space_after = ref_text.spaceAfter
+        space_before = ref_text.spaceBefore
     desc: MakeTextLayerActionDescriptor = {
         "_obj": "make",
         "_target": [{"_ref": "textLayer"}],
@@ -271,11 +281,11 @@ def create_text_layer_with_path(
                         "_obj": "paragraphStyle",
                         "spaceBefore": {
                             "_unit": "pointsUnit",
-                            "_value": float(ref_text.spaceBefore),
+                            "_value": float(space_before),
                         },
                         "spaceAfter": {
                             "_unit": "pointsUnit",
-                            "_value": float(ref_text.spaceAfter),
+                            "_value": float(space_after),
                         },
                     },
                 }
