@@ -31,7 +31,7 @@ jobs:
           npm run build
 
       - name: Set current date as env variable
-        run: echo "NOW=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
+        run: echo "NOW=$(date -u +'%Y-%m-%d %H:%M:%S') UTC" >> $GITHUB_ENV
 
       - name: Set current path friendly date as env variable
         run: echo "NOW_PATH=$(date +'%Y-%m-%dT%H-%M-%S')" >> $GITHUB_ENV
@@ -56,8 +56,13 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ env.NOW }}-${{ env.SHORT_SHA }}"
+          name: "${{ env.NOW }} ${{ env.SHORT_SHA }}"
           files: ${{ env.ARCHIVE_NAME }}
           tag_name: ${{ env.NOW_PATH }}
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+      - name: Delete old releases
+        run: gh release list --json tagName --jq '.[] | .tagName' | tail -n+4 | xargs -r -n 1 gh release delete --yes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
