@@ -45,3 +45,21 @@ class LayerVisibleContext(AbstractContextManager[None]):
         exc_tb: TracebackType | None,
     ) -> None:
         self._layer.visible = self._initial_visibility
+
+
+class TemporaryLayerCopy[T: (ArtLayer, LayerSet)](AbstractContextManager[T]):
+    def __init__(self, layer: T) -> None:
+        self._layer = layer
+        self._copy: T
+
+    def __enter__(self) -> T:
+        self._copy = self._layer.duplicate(self._layer, ElementPlacement.PlaceAfter)
+        return self._copy
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self._copy.remove()

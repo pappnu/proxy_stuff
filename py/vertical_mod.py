@@ -639,7 +639,9 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                     reference=self.textbox_bottom_reference,
                 )
             ]
-        return super(SagaMod, self).rules_text_and_pt_layers()
+        return (
+            super() if self.is_token else super(BorderlessVectorTemplate, self)
+        ).rules_text_and_pt_layers()
 
     def textbox_positioning(self) -> None:
         if (

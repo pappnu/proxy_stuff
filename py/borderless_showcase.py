@@ -71,7 +71,7 @@ from .utils.colors import (
     create_gradient_config,
     create_gradient_location_map,
 )
-from .utils.layer import get_layer_dimensions_via_rasterization
+from .utils.layer import get_layer_dimensions_via_rasterization, TemporaryLayerCopy
 from .utils.layer_fx import get_stroke_details
 from .utils.path import check_layer_overlap_with_shape, create_shape_layer
 from .utils.text import align_dimension
@@ -1365,12 +1365,6 @@ class BorderlessShowcase(
         vertical_padding: tuple[float | int, float | int] | None = None,
     ) -> tuple[ArtLayer, ReferenceLayer] | None:
         """Calculates the required size for rules textbox when the rules text has a fixed font size."""
-        if not oracle_text + (flavor_text or ""):
-            return (
-                base_text_layer,
-                self.textless_bottom_reference_layer or base_textbox_reference,
-            )
-
         min_top = min_top if min_top is not None else self.doc_height
         vertical_padding = (
             vertical_padding
@@ -1656,29 +1650,34 @@ class BorderlessShowcase(
         # First pass of sizing
         for idx, arg in enumerate(textbox_args_sorted):
             height_padding = arg.get("height_padding", 0) or 0
-            arg["base_text_layer"].visible = False
-            base_text_layer_copy = arg["base_text_layer"].duplicate(
-                arg["base_text_layer"], ElementPlacement.PlaceBefore
-            )
-            sized = self.adjust_textbox_for_font_size(
-                base_text_layer=base_text_layer_copy,
-                base_textbox_reference=arg["base_textbox_reference"],
-                base_text_wrap_reference=arg["base_text_wrap_reference"],
-                divider_layer=arg["divider_layer"],
-                oracle_text=arg["oracle_text"],
-                flavor_text=arg["flavor_text"],
-                min_top=min(
-                    arg.get("min_top", self.doc_height) or self.doc_height,
-                    tallest_top + height_padding,
+
+            if not arg["oracle_text"] or arg["flavor_text"]:
+                sized = (
+                    arg["base_text_layer"],
+                    self.textless_bottom_reference_layer
+                    or arg["base_textbox_reference"],
                 )
-                or None,
-            )
-            # Some unknown interaction causes the previous reference layer
-            # to turn visible when starting a new sizing loop. Selecting some
-            # other layer seems to fix it without causing side effects.
-            if self.art_layer:
-                select_layer(self.art_layer)
-            base_text_layer_copy.remove()
+            else:
+                with TemporaryLayerCopy(arg["base_text_layer"]) as base_text_layer_copy:
+                    sized = self.adjust_textbox_for_font_size(
+                        base_text_layer=base_text_layer_copy,
+                        base_textbox_reference=arg["base_textbox_reference"],
+                        base_text_wrap_reference=arg["base_text_wrap_reference"],
+                        divider_layer=arg["divider_layer"],
+                        oracle_text=arg["oracle_text"],
+                        flavor_text=arg["flavor_text"],
+                        min_top=min(
+                            arg.get("min_top", self.doc_height) or self.doc_height,
+                            tallest_top + height_padding,
+                        )
+                        or None,
+                    )
+                    # Some unknown interaction causes the previous reference layer
+                    # to turn visible when starting a new sizing loop. Selecting some
+                    # other layer seems to fix it without causing side effects.
+                    if self.art_layer:
+                        select_layer(self.art_layer)
+            arg["base_text_layer"].visible = False
             if sized:
                 sizes.append(sized)
                 if (
@@ -1697,32 +1696,33 @@ class BorderlessShowcase(
             zip(sizes.copy(), textbox_args_sorted)
         ):
             orig_idx = textbox_args.index(arg)
+            height_padding = arg.get("height_padding", 0) or 0
 
-            if idx == tallest_idx:
+            if (
+                idx == tallest_idx
+                # If height already matches, there's no need to recreate the layer
+                or ref.dims["height"] + height_padding == tallest_height
+            ):
                 sizes[orig_idx] = sizes[idx]
                 continue
 
-            height_padding = arg.get("height_padding", 0) or 0
             layer.remove()
             ref.remove()
             min_top = tallest_top + height_padding
-            base_text_layer_copy = arg["base_text_layer"].duplicate(
-                arg["base_text_layer"], ElementPlacement.PlaceBefore
-            )
-            sized = self.adjust_textbox_for_font_size(
-                base_text_layer=base_text_layer_copy,
-                base_textbox_reference=arg["base_textbox_reference"],
-                base_text_wrap_reference=arg["base_text_wrap_reference"],
-                divider_layer=arg["divider_layer"],
-                oracle_text=arg["oracle_text"],
-                flavor_text=arg["flavor_text"],
-                min_top=min_top,
-                align_to=min_top + (tallest_height - height_padding) / 2,
-            )
-            # Same reference layer turning visible bug as above.
-            if self.art_layer:
-                select_layer(self.art_layer)
-            base_text_layer_copy.remove()
+            with TemporaryLayerCopy(arg["base_text_layer"]) as base_text_layer_copy:
+                sized = self.adjust_textbox_for_font_size(
+                    base_text_layer=base_text_layer_copy,
+                    base_textbox_reference=arg["base_textbox_reference"],
+                    base_text_wrap_reference=arg["base_text_wrap_reference"],
+                    divider_layer=arg["divider_layer"],
+                    oracle_text=arg["oracle_text"],
+                    flavor_text=arg["flavor_text"],
+                    min_top=min_top,
+                    align_to=min_top + (tallest_height - height_padding) / 2,
+                )
+                # Same reference layer turning visible bug as above.
+                if self.art_layer:
+                    select_layer(self.art_layer)
             if sized:
                 sizes[orig_idx] = sized
             else:
