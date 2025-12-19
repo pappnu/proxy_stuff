@@ -5,6 +5,9 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
 ## Templates
 
 - Borderless Showcase
+   ```
+   Please note that this template has a lower than normal bottom area reserved for the collector info fields.
+   ```
 - Borderless Enhanced
 - Vectorized Borderless Planeswalker
 
