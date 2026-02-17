@@ -34,7 +34,7 @@ jobs:
         run: echo "NOW=$(date -u +'%Y-%m-%d %H:%M:%S') UTC" >> $GITHUB_ENV
 
       - name: Set current path friendly date as env variable
-        run: echo "NOW_PATH=$(date +'%Y-%m-%dT%H-%M-%S')" >> $GITHUB_ENV
+        run: echo "NOW_PATH=$(date -u +'%Y-%m-%dT%H%M%SZ')" >> $GITHUB_ENV
 
       - name: Set commit short sha as env variable
         run: echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
@@ -63,6 +63,6 @@ jobs:
           generate_release_notes: true
 
       - name: Delete old releases
-        run: gh release list --json tagName --jq '.[] | .tagName' | tail -n+4 | xargs -r -n 1 gh release delete --yes
+        run: gh release list --json tagName --jq '.[] | .tagName' | tail -n+7 | xargs -r -n 1 gh release delete --yes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
