@@ -4,10 +4,8 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
 
 ## Templates
 
-- Borderless Showcase
-   ```
-   Please note that this template has a lower than normal bottom area reserved for the collector info fields.
-   ```
+- Borderless Showcase  
+     *Please note that this template has a lower than normal bottom area reserved for the collector info fields.*
 - Borderless Enhanced
 - Vectorized Borderless Planeswalker
 
@@ -29,6 +27,7 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
    └── ...
    ```
 2. Download the templates via Proxyshop's updater or manually from [here](https://drive.google.com/drive/folders/1Q4JgzLOWCocjh56MKTfHgSPGMS-QQtOL).
+3. Look at the [Troubleshooting](#troubleshooting) section as it is quite likely that you will encounter at least the *'Confirmation dialog halts the rendering'* problem.
 
 ## Troubleshooting
 
