@@ -4,7 +4,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from enum import Enum, StrEnum
 from functools import cached_property
-from threading import Event
+from logging import Logger
 from typing import Literal
 
 from photoshop.api import (
@@ -21,14 +21,11 @@ from photoshop.api.enumerations import ElementPlacement
 
 from src import APP
 from src._config import AppConfig
-from src.console import TerminalConsole
-from src.gui.console import GUIConsole
 from src.helpers.colors import get_color, get_rgb_from_hex
 from src.helpers.layers import select_layer
 from src.helpers.selection import select_layer_pixels
+from src.render.setup import RenderOperation
 from src.schema.colors import ColorObject
-
-NO_DIALOG = DialogModes.DisplayNoDialogs
 
 
 class LAYER_NAMES(StrEnum):
@@ -79,16 +76,14 @@ def is_hex_color(value: str) -> re.Match[str] | None:
     return lazy_values.hex_color_regex.match(value)
 
 
-def parse_hex_color_list(
-    value: str, console: GUIConsole | TerminalConsole
-) -> list[SolidColor]:
+def parse_hex_color_list(value: str, logger: Logger) -> list[SolidColor]:
     colors: list[SolidColor] = []
     parts = value.split(",")
     for part in parts:
         if is_hex_color(part):
             colors.append(get_rgb_from_hex(part))
         else:
-            console.update(f"WARNING: Encountered non-hexadecimal color: {part}")
+            logger.warning(f"Encountered non-hexadecimal color: {part}")
     return colors
 
 
@@ -148,17 +143,23 @@ def find_art_layer(
 
 def copy():
     """Same as pressing Ctrl-C in Photoshop."""
-    APP.instance.executeAction(APP.instance.cID("copy"), None, NO_DIALOG)
+    APP.instance.executeAction(
+        APP.instance.cID("copy"), None, DialogModes.DisplayNoDialogs
+    )
 
 
 def paste():
     """Same as pressing Ctrl-V in Photoshop."""
-    APP.instance.executeAction(APP.instance.cID("past"), None, NO_DIALOG)
+    APP.instance.executeAction(
+        APP.instance.cID("past"), None, DialogModes.DisplayNoDialogs
+    )
 
 
 def delete():
     """Same as pressing Del in Photoshop."""
-    APP.instance.executeAction(APP.instance.cID("Dlt "), None, NO_DIALOG)
+    APP.instance.executeAction(
+        APP.instance.cID("Dlt "), None, DialogModes.DisplayNoDialogs
+    )
 
 
 def create_art_layer(
@@ -198,7 +199,9 @@ def flip_layer(layer: ArtLayer | LayerSet, direction: FlipDirection):
     desc.putEnumerated(
         APP.instance.cID("Axis"), APP.instance.cID("Ornt"), APP.instance.cID(direction)
     )
-    APP.instance.executeAction(APP.instance.cID("Flip"), desc, NO_DIALOG)
+    APP.instance.executeAction(
+        APP.instance.cID("Flip"), desc, DialogModes.DisplayNoDialogs
+    )
 
 
 # https://community.adobe.com/t5/photoshop-ecosystem-discussions/check-if-layer-has-mask/m-p/3702981
@@ -218,7 +221,9 @@ def create_clipping_mask(layer: ArtLayer):
         APP.instance.cID("Lyr "), APP.instance.cID("Ordn"), APP.instance.cID("Trgt")
     )
     desc1.putReference(APP.instance.cID("null"), ref1)
-    APP.instance.executeAction(APP.instance.sID("groupEvent"), desc1, NO_DIALOG)
+    APP.instance.executeAction(
+        APP.instance.sID("groupEvent"), desc1, DialogModes.DisplayNoDialogs
+    )
 
 
 def select_tool(tool: Literal["pathComponentSelectTool", "removeTool"]):
@@ -230,7 +235,9 @@ def select_tool(tool: Literal["pathComponentSelectTool", "removeTool"]):
     ref.putClass(APP.instance.sID(tool))
     desc.putReference(APP.instance.cID("null"), ref)
     desc.putBoolean(APP.instance.sID("dontRecord"), True)
-    APP.instance.executeAction(APP.instance.cID("slct"), desc, NO_DIALOG)
+    APP.instance.executeAction(
+        APP.instance.cID("slct"), desc, DialogModes.DisplayNoDialogs
+    )
 
 
 def create_vector_mask_from_shape(layer: ArtLayer, shape: ArtLayer):
@@ -257,7 +264,9 @@ def deselect_all_layers() -> None:
         APP.instance.cID("Lyr "), APP.instance.cID("Ordn"), APP.instance.cID("Trgt")
     )
     desc.putReference(APP.instance.cID("null"), ref)
-    APP.instance.executeAction(APP.instance.sID("selectNoLayers"), desc, NO_DIALOG)
+    APP.instance.executeAction(
+        APP.instance.sID("selectNoLayers"), desc, DialogModes.DisplayNoDialogs
+    )
 
 
 def rasterize_layer_style(layer: ArtLayer | LayerSet) -> None:
@@ -274,11 +283,12 @@ def rasterize_layer_style(layer: ArtLayer | LayerSet) -> None:
         APP.instance.sID("rasterizeItem"),
         APP.instance.sID("layerStyle"),
     )
-    APP.instance.executeAction(idrasterizeLayer, desc, NO_DIALOG)
+    APP.instance.executeAction(idrasterizeLayer, desc, DialogModes.DisplayNoDialogs)
 
 
 def manual_fill(
-    console: GUIConsole | TerminalConsole, event: Event, layer: ArtLayer | None = None
+    render_operation: RenderOperation,
+    layer: ArtLayer | None = None,
 ) -> None:
     docref = APP.instance.activeDocument
     if layer:
@@ -298,9 +308,8 @@ def manual_fill(
             select_tool("removeTool")
         except COMError:
             pass
-        console.await_choice(
-            event,
-            "Rendering paused for manual art filling. Click Continue to proceed ...",
+        render_operation.pause_sync(
+            "Rendering paused for manual art filling. Press Continue to proceed."
         )
 
         # Clear selection

@@ -1,6 +1,7 @@
 import os
 import re
 from collections.abc import Callable
+from logging import getLogger
 from re import Pattern
 
 from photoshop.api._artlayer import ArtLayer
@@ -8,10 +9,12 @@ from photoshop.api._document import Document
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ChannelType, ElementPlacement
 
-from src import APP, CFG, CONSOLE
+from src._state import PATH
+from src.gui.qml.models.file_dialog_model import FileMode
 from src.templates import BaseTemplate
+from src.utils.asynchronic import async_to_sync
 
-from .gui import open_ask_file_dialog
+_logger = getLogger()
 
 
 def find_file_in_directory(
@@ -64,9 +67,9 @@ def copy_selection_channels(source: Document, target: Document):
 
 
 def load_old_artwork(instance: BaseTemplate):
-    template_doc = APP.instance.activeDocument
+    template_doc = instance.app.activeDocument
 
-    directory_path = "backup\\"
+    directory_path = PATH.CWD / "backup"
     initialfile = find_file_in_directory(
         directory_path,
         instance.layout.name,
@@ -81,22 +84,42 @@ def load_old_artwork(instance: BaseTemplate):
             ),
         )
 
-    if file := open_ask_file_dialog(initialdir=directory_path, filetypes=filetypes):
+    if instance.file_dialog and (
+        file := async_to_sync(
+            instance.file_dialog.select_files(
+                title="Select backup",
+                initial_dir=directory_path,
+                file_mode=FileMode.OpenFile,
+                # Suggest backups with same card name by default
+                filters=[
+                    *(
+                        (
+                            f"Card ({instance.layout.name.strip().lower().replace(' ', '*')}*.psd)",
+                        )
+                        if initialfile
+                        else tuple()
+                    ),
+                    instance.file_dialog.PSD_FILTER,
+                    instance.file_dialog.ALL_FILTER,
+                ],
+                dialog_id="backup_document_selector",
+            )
+        )
+    ):
 
         def is_art_layer(art_layer: ArtLayer | LayerSet):
             return bool(re.match(r"^(Generative )?Layer [0-9]+", art_layer.name))
 
         default_preceding_layer = template_doc.layers[-2]
-        print(default_preceding_layer.name)
 
         if instance.art_layer and instance.art_layer.name != "Layer 1":
-            CONSOLE.update(
-                f"WARNING: The existing art layer isn't as expected. Found '{instance.art_layer.name}' instead of 'Layer 1'"
+            _logger.warning(
+                f"The existing art layer isn't as expected. Found '{instance.art_layer.name}' instead of 'Layer 1'"
             )
         elif instance.art_layer:
             instance.art_layer.remove()
 
-        backup_doc = APP.instance.open(file)
+        backup_doc = instance.app.open(file[0].toLocalFile())
         for (
             layer,
             preceding,
@@ -110,7 +133,7 @@ def load_old_artwork(instance: BaseTemplate):
                 )
             if not preceding_layer:
                 preceding_layer = default_preceding_layer
-            CONSOLE.update(f"Copy layer '{layer.name}' after '{preceding_layer.name}'")
+            _logger.info(f"Copying layer '{layer.name}' after '{preceding_layer.name}'")
             layer.duplicate(default_preceding_layer, ElementPlacement.PlaceAfter)
 
         copy_selection_channels(backup_doc, template_doc)
@@ -123,6 +146,8 @@ def load_old_artwork(instance: BaseTemplate):
 
 def load_backup_artwork(obj: BaseTemplate) -> bool:
     old = False
-    if CFG.get_setting(section="OTHER", key="Copy.Art", default=False, is_bool=True):
+    if obj.config.get_setting(
+        section="OTHER", key="Copy.Art", default=False, is_bool=True
+    ):
         old = load_old_artwork(obj)
     return old

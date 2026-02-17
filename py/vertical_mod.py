@@ -4,7 +4,6 @@ from photoshop.api import ElementPlacement, RasterizeType
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
-from src import CFG
 from src.enums.layers import LAYERS
 from src.enums.settings import BorderlessColorMode
 from src.helpers.colors import get_pinline_gradient, rgb_white
@@ -38,11 +37,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     @cached_property
     def textbox_height(self) -> float | int:
-        return max(get_numeric_setting(CFG, "TEXT", "Textbox.Height", 0), 0)
+        return max(get_numeric_setting(self.config, "TEXT", "Textbox.Height", 0), 0)
 
     @cached_property
     def show_vertical_reminder_text(self) -> bool:
-        return CFG.get_bool_setting(
+        return not self.config.remove_reminder and self.config.get_bool_setting(
             section="TEXT", key="Vertical.Reminder", default=False
         )
 
@@ -386,7 +385,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     @cached_property
     def type_reference(self) -> ArtLayer | None:
-        if not CFG.symbol_enabled:
+        if not self.config.symbol_enabled:
             return getLayer(
                 f"{LAYERS.TYPE_LINE} {LAYER_NAMES.OVERFLOW_REFERENCE}", self.text_group
             )
@@ -687,7 +686,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                         apply_mask_to_layer_fx(layer)
 
             # Shift expansion symbol
-            if CFG.symbol_enabled and self.expansion_symbol_layer:
+            if self.config.symbol_enabled and self.expansion_symbol_layer:
                 self.expansion_symbol_layer.translate(0, delta)
 
             # Shift indicator
@@ -791,10 +790,9 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         if isinstance(self.layout, SagaLayout):
             # Handle reminder text
             if self.text_layer_reminder:
-                if self.show_vertical_reminder_text or (
-                    self.is_vertical_creature
-                    and self.layout.saga_description
-                    and not self.has_extra_textbox
+                if self.layout.saga_description and (
+                    self.show_vertical_reminder_text
+                    or (self.is_vertical_creature and not self.has_extra_textbox)
                 ):
                     self.text.append(
                         FormattedTextArea(

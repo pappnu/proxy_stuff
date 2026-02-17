@@ -6,7 +6,6 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
-from src import CFG
 from src.enums.layers import LAYERS
 from src.helpers.colors import get_rgb
 from src.helpers.effects import enable_layer_fx
@@ -25,13 +24,13 @@ class BorderlessVertical(VerticalMod):
 
     @cached_property
     def color_typeline(self) -> bool:
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Color.Typeline", default=False
         )
 
     @cached_property
     def color_textbox(self) -> bool:
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Color.Textbox", default=False
         )
 

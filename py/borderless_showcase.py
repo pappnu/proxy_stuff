@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterable, Sequence
 from functools import cached_property
+from logging import getLogger
 from math import ceil
 from typing import Literal, NotRequired, TypedDict
 
@@ -8,7 +9,6 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
-from src import CFG
 from src.cards import strip_reminder_text
 from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
@@ -71,7 +71,7 @@ from .utils.colors import (
     create_gradient_config,
     create_gradient_location_map,
 )
-from .utils.layer import get_layer_dimensions_via_rasterization, TemporaryLayerCopy
+from .utils.layer import TemporaryLayerCopy, get_layer_dimensions_via_rasterization
 from .utils.layer_fx import get_stroke_details
 from .utils.path import check_layer_overlap_with_shape, create_shape_layer
 from .utils.text import align_dimension
@@ -79,6 +79,8 @@ from .uxp.path import PathPointConf
 from .uxp.shape import ShapeOperation, merge_shapes
 from .uxp.text import CreateTextLayerWithPathOptions, create_text_layer_with_path
 from .vertical_mod import VerticalMod
+
+_logger = getLogger(__name__)
 
 
 class TextboxSizingArgs(TypedDict):
@@ -135,39 +137,42 @@ class BorderlessShowcase(
 
     @cached_property
     def is_content_aware_enabled(self) -> bool:
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="ART", key="Content.Aware.Fill", default=True
         )
 
     @cached_property
     def color_limit(self) -> int:
-        return CFG.get_int_setting(section="COLORS", key="Max.Colors", default=2) + 1
+        return (
+            self.config.get_int_setting(section="COLORS", key="Max.Colors", default=2)
+            + 1
+        )
 
     @cached_property
     def front_face_colors(self) -> bool:
         """Returns True if lighter color map should be used on front face DFC cards."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Front.Face.Colors", default=True
         )
 
     @cached_property
     def multicolor_pinlines(self) -> bool:
         """Returns True if Pinlines for multicolored cards should use blended colors."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Multicolor.Pinlines", default=True
         )
 
     @cached_property
     def pinlines_color_override(self) -> list[SolidColor]:
-        if setting := CFG.get_setting(
+        if setting := self.config.get_setting(
             section="COLORS", key="Pinlines.Override", default=None
         ):
-            return parse_hex_color_list(setting, self.console)
+            return parse_hex_color_list(setting, _logger)
         return []
 
     @cached_property
     def expansion_symbol_color_override(self) -> ExpansionSymbolOverrideMode:
-        if setting := CFG.get_setting(
+        if setting := self.config.get_setting(
             section="COLORS",
             key="Expansion.Symbol.Override",
             default=None,
@@ -183,37 +188,37 @@ class BorderlessShowcase(
 
     @cached_property
     def expansion_symbol_custom_colors(self) -> list[SolidColor]:
-        if setting := CFG.get_setting(
+        if setting := self.config.get_setting(
             section="COLORS",
             key="Expansion.Symbol.Custom",
             default=None,
             is_bool=False,
         ):
-            return parse_hex_color_list(setting, self.console)
+            return parse_hex_color_list(setting, _logger)
         return []
 
     @cached_property
     def darken_exnapsion_symbol_gradient_endpoints(self) -> float:
         return get_numeric_setting(
-            CFG, "COLORS", "Expansion.Symbol.Darken", 0, (0, 100)
+            self.config, "COLORS", "Expansion.Symbol.Darken", 0, (0, 100)
         )
 
     @cached_property
     def expansion_symbol_gradient_angle(self) -> float:
         return get_numeric_setting(
-            CFG, "COLORS", "Expansion.Symbol.Angle", 0, (-360, 360)
+            self.config, "COLORS", "Expansion.Symbol.Angle", 0, (-360, 360)
         )
 
     @cached_property
     def expansion_symbol_gradient_scale(self) -> float:
         return get_numeric_setting(
-            CFG, "COLORS", "Expansion.Symbol.Scale", 70, (10, 150)
+            self.config, "COLORS", "Expansion.Symbol.Scale", 70, (10, 150)
         )
 
     @cached_property
     def expansion_symbol_gradient_method(self) -> GradientMethod:
         if (
-            setting := CFG.get_setting(
+            setting := self.config.get_setting(
                 section="COLORS",
                 key="Expansion.Symbol.Method",
                 default=None,
@@ -225,7 +230,7 @@ class BorderlessShowcase(
 
     @cached_property
     def pt_box_and_bottom_pinline_type(self) -> Literal["Full", "Partial", "Split"]:
-        setting = CFG.get_setting(
+        setting = self.config.get_setting(
             section="SHAPES", key="PT.Box.And.Pinline", default="Full", is_bool=False
         )
         if setting in ("Full", "Partial", "Split"):
@@ -236,7 +241,7 @@ class BorderlessShowcase(
 
     @cached_property
     def bottom_border_type(self) -> Literal["Full", "Fade", "Shadow"] | None:
-        setting = CFG.get_setting(
+        setting = self.config.get_setting(
             section="SHAPES", key="Bottom.Border", default="Full", is_bool=False
         )
         if setting in ("Full", "Fade", "Shadow"):
@@ -247,7 +252,9 @@ class BorderlessShowcase(
 
     @cached_property
     def flip_twins(self) -> bool:
-        return CFG.get_bool_setting(section="SHAPES", key="Flip.Twins", default=False)
+        return self.config.get_bool_setting(
+            section="SHAPES", key="Flip.Twins", default=False
+        )
 
     @cached_property
     def textbox_height(self) -> float | int:
@@ -258,11 +265,13 @@ class BorderlessShowcase(
 
     @cached_property
     def rules_text_font_size(self) -> float | int:
-        return max(get_numeric_setting(CFG, "TEXT", "Rules.Text.Font.Size", 0), 0)
+        return max(
+            get_numeric_setting(self.config, "TEXT", "Rules.Text.Font.Size", 0), 0
+        )
 
     @cached_property
     def rules_text_padding(self) -> float | int:
-        return get_numeric_setting(CFG, "TEXT", "Rules.Text.Padding", 64)
+        return get_numeric_setting(self.config, "TEXT", "Rules.Text.Padding", 64)
 
     @cached_property
     def drop_shadow_enabled(self) -> bool:
@@ -301,12 +310,20 @@ class BorderlessShowcase(
         return self.is_creature
 
     @cached_property
+    def has_displaced_pt_box(self) -> bool:
+        return self.is_leveler or self.is_station
+
+    @cached_property
     def has_flipside_pt(self) -> bool:
         return self.is_transform and self.is_front and self.is_flipside_creature
 
     @cached_property
     def requires_text_shaping(self) -> bool:
-        return self.is_pt_enabled or self.has_flipside_pt or self.is_mdfc
+        return (
+            (self.is_pt_enabled and not isinstance(self.layout, StationLayout))
+            or self.has_flipside_pt
+            or self.is_mdfc
+        )
 
     @cached_property
     def supports_dynamic_textbox_height(self) -> bool:
@@ -356,7 +373,7 @@ class BorderlessShowcase(
         if isinstance(self.layout, AdventureLayout):
             # Get the user's preferred setting
             size = str(
-                CFG.get_option(
+                self.config.get_option(
                     section="FRAME",
                     key="Textbox.Size",
                     enum_class=BorderlessTextbox,
@@ -435,7 +452,7 @@ class BorderlessShowcase(
 
     def process_layout_data(self) -> None:
         if self.is_vertical_creature:
-            CFG.symbol_enabled = False
+            self.config.symbol_enabled = False
 
         super().process_layout_data()
 
@@ -443,7 +460,7 @@ class BorderlessShowcase(
             # Render mutate text like any other rules text
             self.layout.oracle_text = (
                 strip_reminder_text(self.layout.mutate_text)
-                if CFG.remove_reminder
+                if self.config.remove_reminder
                 else self.layout.mutate_text
             ) + f"\n{self.layout.oracle_text}"
 
@@ -936,7 +953,7 @@ class BorderlessShowcase(
 
     @cached_property
     def pt_box_shape(self) -> list[ArtLayer | None]:
-        if not self.is_pt_enabled or self.is_leveler:
+        if not self.is_pt_enabled or self.has_displaced_pt_box:
             return [None]
 
         if self.bottom_border_type == "Full":
@@ -977,7 +994,7 @@ class BorderlessShowcase(
 
     @cached_property
     def bottom_pinline_shape(self) -> ArtLayer | None:
-        if self.is_pt_enabled and not self.is_leveler:
+        if self.is_pt_enabled and not self.has_displaced_pt_box:
             return None
         return getLayer(
             "Partial"
@@ -1134,6 +1151,12 @@ class BorderlessShowcase(
     # endregion Frame
 
     # region Text
+
+    @cached_property
+    def text_layer_pt(self) -> ArtLayer | None:
+        if self.is_station:
+            return
+        return super().text_layer_pt
 
     @cached_property
     def text_layer_ability(self) -> ArtLayer | None:
@@ -1651,7 +1674,7 @@ class BorderlessShowcase(
         for idx, arg in enumerate(textbox_args_sorted):
             height_padding = arg.get("height_padding", 0) or 0
 
-            if not arg["oracle_text"] or arg["flavor_text"]:
+            if not arg["oracle_text"] and arg["flavor_text"]:
                 sized = (
                     arg["base_text_layer"],
                     self.textless_bottom_reference_layer
@@ -1783,6 +1806,9 @@ class BorderlessShowcase(
                                 "height": entry.reference_dims["height"]
                                 - stroke_details["size"],
                             }
+
+                        # The text element already has a shape that offsets PT box and other extras.
+                        entry.pt_reference = None
                         break
 
         if isinstance(self.layout, BattleLayout):
@@ -1830,7 +1856,7 @@ class BorderlessShowcase(
                     self.typeline_pinline_shape.translate(0, delta)
 
                 # Shift expansion symbol
-                if CFG.symbol_enabled and self.expansion_symbol_layer:
+                if self.config.symbol_enabled and self.expansion_symbol_layer:
                     self.expansion_symbol_layer.translate(0, delta)
 
                 # Shift indicator
@@ -2386,7 +2412,7 @@ class BorderlessShowcase(
                 text_area = FormattedTextArea(
                     layer=self.text_layer_rules_prototype,
                     contents="Prototype"
-                    if CFG.remove_reminder
+                    if self.config.remove_reminder
                     else self.text_layer_rules_prototype.textItem.contents,
                     reference=self.rules_text_reference_prototype,
                 )

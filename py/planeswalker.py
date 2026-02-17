@@ -12,7 +12,6 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 
 import src.helpers as psd
-from src import APP, CFG
 from src.enums.layers import LAYERS
 from src.frame_logic import contains_frame_colors
 from src.layouts import PlaneswalkerLayout
@@ -46,7 +45,7 @@ class PlaneswalkerBorderlessVector(
     def color_limit(self) -> int:
         return (
             int(
-                CFG.get_setting(
+                self.config.get_setting(
                     section="COLORS", key="Max.Colors", default="2", is_bool=False
                 )
             )
@@ -56,52 +55,56 @@ class PlaneswalkerBorderlessVector(
     @cached_property
     def colored_textbox(self) -> bool:
         """Returns True if Textbox should be colored."""
-        return CFG.get_bool_setting(section="COLORS", key="Color.Textbox", default=True)
+        return self.config.get_bool_setting(
+            section="COLORS", key="Color.Textbox", default=True
+        )
 
     @cached_property
     def multicolor_textbox(self) -> bool:
         """Returns True if Textbox for multicolored cards should use blended colors."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Multicolor.Textbox", default=True
         )
 
     @cached_property
     def multicolor_pinlines(self) -> bool:
         """Returns True if Pinlines and Crown for multicolored cards should use blended colors."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Multicolor.Pinlines", default=True
         )
 
     @cached_property
     def multicolor_twins(self) -> bool:
         """Returns True if Twins for multicolored cards should use blended colors."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Multicolor.Twins", default=True
         )
 
     @cached_property
     def hybrid_colored(self) -> bool:
         """Returns True if Twins and PT should be colored on Hybrid cards."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Hybrid.Colored", default=True
         )
 
     @cached_property
     def front_face_colors(self) -> bool:
         """Returns True if lighter color map should be used on front face DFC cards."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="COLORS", key="Front.Face.Colors", default=True
         )
 
     @cached_property
     def drop_shadow_enabled(self) -> bool:
         """Returns True if Drop Shadow text setting is enabled."""
-        return CFG.get_bool_setting(section="SHADOWS", key="Drop.Shadow", default=True)
+        return self.config.get_bool_setting(
+            section="SHADOWS", key="Drop.Shadow", default=True
+        )
 
     @cached_property
     def bottom_shadow_enabled(self) -> bool:
         """Returns True if Bottom Shadow setting is enabled."""
-        return CFG.get_bool_setting(
+        return self.config.get_bool_setting(
             section="SHADOWS", key="Bottom.Shadow", default=True
         )
 
@@ -465,7 +468,7 @@ class PlaneswalkerBorderlessVector(
                 "mask": mask,
                 "vector": True,
                 "layer": target,
-                "funcs": [apply_vector_mask_to_layer_fx],
+                "funcs": [self.apply_vector_mask_to_layer_fx],
             }
 
     @cached_property
@@ -718,19 +721,18 @@ class PlaneswalkerBorderlessVector(
         """
         layer.textItem.color = color
 
-
-# TODO integrate into Proxyshop (maybe as an option for src.helpers.mask.apply_mask_to_layer_fx)
-def apply_vector_mask_to_layer_fx(layer: ArtLayer | LayerSet | None = None) -> None:
-    if not layer:
-        layer = APP.instance.activeDocument.activeLayer
-    ref = ActionReference()
-    ref.putIdentifier(APP.instance.sID("layer"), layer.id)
-    desc = APP.instance.executeActionGet(ref)
-    layer_fx = desc.getObjectValue(APP.instance.sID("layerEffects"))
-    layer_fx.putBoolean(APP.instance.sID("vectorMaskAsGlobalMask"), True)
-    desc = ActionDescriptor()
-    desc.putReference(APP.instance.sID("target"), ref)
-    desc.putObject(APP.instance.sID("to"), APP.instance.sID("layer"), layer_fx)
-    APP.instance.executeAction(
-        APP.instance.sID("set"), desc, DialogModes.DisplayNoDialogs
-    )
+    # TODO integrate into Proxyshop (maybe as an option for src.helpers.mask.apply_mask_to_layer_fx)
+    def apply_vector_mask_to_layer_fx(
+        self, layer: ArtLayer | LayerSet | None = None
+    ) -> None:
+        if not layer:
+            layer = self.app.activeDocument.activeLayer
+        ref = ActionReference()
+        ref.putIdentifier(self.app.sID("layer"), layer.id)
+        desc = self.app.executeActionGet(ref)
+        layer_fx = desc.getObjectValue(self.app.sID("layerEffects"))
+        layer_fx.putBoolean(self.app.sID("vectorMaskAsGlobalMask"), True)
+        desc = ActionDescriptor()
+        desc.putReference(self.app.sID("target"), ref)
+        desc.putObject(self.app.sID("to"), self.app.sID("layer"), layer_fx)
+        self.app.executeAction(self.app.sID("set"), desc, DialogModes.DisplayNoDialogs)

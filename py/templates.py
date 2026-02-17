@@ -4,8 +4,8 @@ from photoshop.api._artlayer import ArtLayer
 
 from src.utils.adobe import ReferenceLayer
 
-from .borderless_vertical import BorderlessVertical
 from .borderless_showcase import BorderlessShowcase
+from .borderless_vertical import BorderlessVertical
 from .planeswalker import PlaneswalkerBorderlessVector
 from .restore import load_backup_artwork
 

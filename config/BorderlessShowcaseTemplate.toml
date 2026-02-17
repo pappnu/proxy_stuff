@@ -51,19 +51,19 @@ default = ""
 [COLORS."Expansion.Symbol.Darken"]
 title = "Darken expansion symbol gradient ends"
 desc = """Darkens the first and last override color in the expansion symbol gradient. Specify as a value between 0-100."""
-type = "numeric"
+type = "float"
 default = 0.0
 
 [COLORS."Expansion.Symbol.Angle"]
 title = "Expansion symbol gradient angle"
 desc = """The angle to use for the expansion symbol color gradient. Specify as a value between -360-360."""
-type = "numeric"
+type = "float"
 default = -45.0
 
 [COLORS."Expansion.Symbol.Scale"]
 title = "Expansion symbol gradient scale"
 desc = """The scale to use for the expansion symbol color gradient. Specify as a value between 10-150."""
-type = "numeric"
+type = "float"
 default = 70.0
 
 [COLORS."Expansion.Symbol.Method"]
@@ -85,19 +85,19 @@ Normal = 1046
 Medium = 866
 Short = 661
 """
-type = "numeric"
+type = "float"
 default = 0.0
 
 [TEXT."Rules.Text.Font.Size"]
 title = "Rules text font size"
 desc = "Font size in points to use for rules text, excluding Case, Class, Saga and Planeswalker layouts. The textbox is automatically sized to conform to the chosen font size. This setting overrides the 'Textbox height' setting. Values <= 0 disable this setting."
-type = "numeric"
+type = "float"
 default = 0.0
 
 [TEXT."Rules.Text.Padding"]
 title = "Rules text vertical padding"
 desc = "The amount of extra vertical padding in pixels to add to rules text. Applies if 'Rules text font size' setting is set or if the rendered card is a Planeswalker."
-type = "numeric"
+type = "float"
 default = 64.0
 
 [TEXT.Nickname]
@@ -152,7 +152,7 @@ default = 0
 
 [BACKUP."Directory"]
 title = "Backup directory"
-desc = "The path to a directory to which backups are saved to and loaded from. Defaults to './backup' when no set."
+desc = "The path to a directory to which backups are saved to and loaded from. Defaults to './out/backup' when not set."
 type = "string"
 default = ""
 

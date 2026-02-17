@@ -7,15 +7,15 @@ from photoshop.api._document import Document
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
-from src import APP, CFG
 from src._state import PATH
+from src.gui.qml.models.file_dialog_model import FileMode
 from src.helpers.document import save_document_psd
 from src.helpers.layers import getLayer
 from src.helpers.masks import apply_mask_to_layer_fx, copy_layer_mask
 from src.templates._core import BaseTemplate
 from src.utils.adobe import ReferenceLayer
+from src.utils.asynchronic import async_to_sync
 
-from .gui import ask_for_confirmation, open_ask_file_dialog
 from .helpers import copy_layer, has_layer_mask
 from .restore import find_file_in_directory
 
@@ -25,17 +25,17 @@ class BackupAndRestore(BaseTemplate):
 
     @cached_property
     def save_backup(self) -> bool:
-        return CFG.get_bool_setting(section="BACKUP", key="Save", default=False)
+        return self.config.get_bool_setting(section="BACKUP", key="Save", default=False)
 
     @cached_property
     def load_backup(self) -> bool:
-        return CFG.get_bool_setting(section="BACKUP", key="Load", default=False)
+        return self.config.get_bool_setting(section="BACKUP", key="Load", default=False)
 
     @cached_property
     def backup_directory(self) -> Path:
         if (
             setting := (
-                CFG.get_setting(section="BACKUP", key="Directory", default=None)
+                self.config.get_setting(section="BACKUP", key="Directory", default=None)
             )
         ) and setting:
             return Path(setting)
@@ -43,7 +43,9 @@ class BackupAndRestore(BaseTemplate):
 
     @cached_property
     def prompt_for_art_backup(self) -> bool:
-        return CFG.get_bool_setting(section="BACKUP", key="Art.Prompt", default=True)
+        return self.config.get_bool_setting(
+            section="BACKUP", key="Art.Prompt", default=True
+        )
 
     # endregion Settings
 
@@ -93,8 +95,8 @@ class BackupAndRestore(BaseTemplate):
 
     def make_backup(self) -> bool:
         if self.layers_to_seek_masks_from or self.layers_to_copy:
-            template_doc = APP.instance.activeDocument
-            backup_doc = APP.instance.documents.add(
+            template_doc = self.app.activeDocument
+            backup_doc = self.app.documents.add(
                 width=template_doc.width, height=template_doc.height
             )
 
@@ -107,17 +109,20 @@ class BackupAndRestore(BaseTemplate):
                         art_layer
                         and layer.name == art_layer.name
                         and self.prompt_for_art_backup
-                        and not ask_for_confirmation(
-                            "Backup art layer?",
-                            "Do you want to copy the art layer to the backup?",
+                        and self.message_dialog
+                        and not async_to_sync(
+                            self.message_dialog.open_message_dialog_async(
+                                title="Backup art layer?",
+                                text="Do you want to copy the art layer to the backup?",
+                            )
                         )
                     ):
                         continue
-                    APP.instance.activeDocument = template_doc
+                    self.app.activeDocument = template_doc
                     copy_layer(layer, relative_layer=default_backup_doc_layer)
 
             for layer in self.layers_to_seek_masks_from:
-                APP.instance.activeDocument = template_doc
+                self.app.activeDocument = template_doc
                 if layer and has_layer_mask(layer):
                     temp_layer = template_doc.artLayers.add()
                     temp_layer.name = layer.name
@@ -126,11 +131,11 @@ class BackupAndRestore(BaseTemplate):
                         temp_layer, relative_layer=default_backup_doc_layer
                     )
                     temp_layer.remove()
-                    # APP.instance.activeDocument = backup_doc
+                    # self.app.activeDocument = backup_doc
                     # bak_layer.name = layer.name
 
             if len(backup_doc.layers) > 1:
-                APP.instance.activeDocument = backup_doc
+                self.app.activeDocument = backup_doc
                 default_backup_doc_layer.isBackgroundLayer = False
                 default_backup_doc_layer.remove()
 
@@ -140,7 +145,7 @@ class BackupAndRestore(BaseTemplate):
                 )
 
             backup_doc.close()
-            APP.instance.activeDocument = template_doc
+            self.app.activeDocument = template_doc
 
             return True
         return False
@@ -150,26 +155,32 @@ class BackupAndRestore(BaseTemplate):
             self.backup_directory,
             self.layout.name,
         )
-        filetypes: list[tuple[str, str | list[str] | tuple[str, ...]]] = [
-            ("PSD", ".psd")
-        ]
-        if initialfile:
-            filetypes.insert(
-                0,
-                (
-                    # Suggest backups with same card name by default
-                    "Card",
-                    f"{self.layout.name.strip().lower().replace(' ', '*')}*",
-                ),
-            )
 
         # Ask which backup to use
-        if file := open_ask_file_dialog(
-            initialdir=self.backup_directory,
-            filetypes=filetypes,
+        if self.file_dialog and (
+            file := async_to_sync(
+                self.file_dialog.select_files(
+                    title="Select backup",
+                    initial_dir=self.backup_directory,
+                    file_mode=FileMode.OpenFile,
+                    # Suggest backups with same card name by default
+                    filters=[
+                        *(
+                            (
+                                f"Card ({self.layout.name.strip().lower().replace(' ', '*')}*.psd)",
+                            )
+                            if initialfile
+                            else tuple()
+                        ),
+                        self.file_dialog.PSD_FILTER,
+                        self.file_dialog.ALL_FILTER,
+                    ],
+                    dialog_id="backup_document_selector",
+                )
+            )
         ):
-            template_doc = APP.instance.activeDocument
-            backup_doc = APP.instance.open(file)
+            template_doc = self.app.activeDocument
+            backup_doc = self.app.open(file[0].toLocalFile())
 
             was_art_restored = False
 
@@ -178,14 +189,14 @@ class BackupAndRestore(BaseTemplate):
             art_layer_name = art_layer.name if art_layer else ""
             for layer in self.layers_to_copy:
                 if layer:
-                    APP.instance.activeDocument = backup_doc
+                    self.app.activeDocument = backup_doc
                     if bak_layer := getLayer(layer.name):
                         layer_copy = copy_layer(
                             bak_layer,
                             relative_layer=layer,
                             insertion_location=ElementPlacement.PlaceBefore,
                         )
-                        APP.instance.activeDocument = template_doc
+                        self.app.activeDocument = template_doc
                         layer_copy.name = layer.name
                         was_art_restored = layer.name == art_layer_name
                         # Merge is used here to work around the fact that we can't just
@@ -196,18 +207,18 @@ class BackupAndRestore(BaseTemplate):
             # Copy masks from backup
             for layer in self.layers_to_seek_masks_from:
                 if layer:
-                    APP.instance.activeDocument = backup_doc
+                    self.app.activeDocument = backup_doc
                     if (bak_layer := getLayer(layer.name)) and has_layer_mask(
                         bak_layer
                     ):
                         temp_layer = copy_layer(bak_layer, relative_layer=layer)
-                        APP.instance.activeDocument = template_doc
+                        self.app.activeDocument = template_doc
                         copy_layer_mask(temp_layer, layer)
                         temp_layer.remove()
                         apply_mask_to_layer_fx(layer)
 
             backup_doc.close()
-            APP.instance.activeDocument = template_doc
+            self.app.activeDocument = template_doc
 
             return was_art_restored
         return False
