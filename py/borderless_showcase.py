@@ -21,6 +21,7 @@ from src.helpers.bounds import (
 from src.helpers.colors import get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
+from src.helpers.masks import apply_mask_to_layer_fx
 from src.helpers.text import (
     get_font_size,
     get_line_count,
@@ -310,6 +311,10 @@ class BorderlessShowcase(
         return self.is_creature
 
     @cached_property
+    def is_textless(self) -> bool:
+        return not any((self.layout.oracle_text, self.layout.flavor_text))
+
+    @cached_property
     def has_displaced_pt_box(self) -> bool:
         return self.is_leveler or self.is_station
 
@@ -361,7 +366,9 @@ class BorderlessShowcase(
 
     @cached_property
     def size(self) -> str:
-        if self.supports_dynamic_textbox_height and (
+        if self.is_textless:
+            return BorderlessTextbox.Textless
+        elif self.supports_dynamic_textbox_height and (
             self.textbox_height or self.rules_text_font_size
         ):
             # Return something else than Tall to trigger textbox_positioning
@@ -478,11 +485,15 @@ class BorderlessShowcase(
 
     # region Backup
 
-    @cached_property
+    @property
     def layers_to_seek_masks_from(self) -> Iterable[ArtLayer | LayerSet | None]:
         if self.docref:
             return (*self.docref.layerSets, *self.docref.artLayers)
         return []
+
+    @property
+    def layers_to_copy(self) -> Iterable[ArtLayer | LayerSet | None]:
+        return [*super().layers_to_copy, getLayer("Remove tool edits")]
 
     # endregion Backup
 
@@ -1059,7 +1070,11 @@ class BorderlessShowcase(
             layers.append(layer)
         elif self.name_normal_pinline_shape:
             # Flip horizontally
-            if self.flip_twins and not (self.is_transform or self.is_mdfc):
+            if (
+                self.flip_twins
+                and not (self.is_transform or self.is_mdfc)
+                and self.layout.mana_cost
+            ):
                 self.name_normal_pinline_shape.translate(self.twins_horizontal_delta, 0)
                 flip_layer(self.name_normal_pinline_shape, FlipDirection.Horizontal)
             layers.append(self.name_normal_pinline_shape)
@@ -1840,7 +1855,7 @@ class BorderlessShowcase(
             else:
                 ref = (
                     self.textless_bottom_reference_layer
-                    if self.is_vertical_layout
+                    if self.is_vertical_layout or self.is_textless
                     else self.textbox_reference
                 )
             if ref and self.textbox_reference_base:
@@ -1915,6 +1930,22 @@ class BorderlessShowcase(
         ]
 
     # endregion Text
+
+    # region Hooks
+
+    @cached_property
+    def hooks(self) -> list[Callable[[], None]]:
+        hooks = super().hooks
+        hooks.append(self.hide_layer_effects_with_pinlines_mask)
+        return hooks
+
+    def hide_layer_effects_with_pinlines_mask(self) -> None:
+        if self.config.exit_early and self.pinlines_group:
+            # Set layer effects to be hidden by pinlines mask
+            # in order to ease creating pop-out effects.
+            apply_mask_to_layer_fx(self.pinlines_group)
+
+    # endregion Hooks
 
     # region Transform
 

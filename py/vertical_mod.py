@@ -1,11 +1,11 @@
 from functools import cached_property
 
-from photoshop.api import ElementPlacement, RasterizeType
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
+from photoshop.api.enumerations import ElementPlacement, RasterizeType
 
 from src.enums.layers import LAYERS
-from src.enums.settings import BorderlessColorMode
+from src.enums.settings import BorderlessColorMode, BorderlessTextbox
 from src.helpers.colors import get_pinline_gradient, rgb_white
 from src.helpers.effects import disable_layer_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
@@ -80,7 +80,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     @cached_property
     def size(self) -> str:
         if self.is_vertical_layout:
-            return LAYERS.TEXTLESS
+            return BorderlessTextbox.Textless
         return super().size
 
     @cached_property

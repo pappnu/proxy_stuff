@@ -51,7 +51,9 @@ class BackupAndRestore(BaseTemplate):
 
     # region Backup Properties
 
-    @cached_property
+    # For some reason using a cached property here leads to an error in make_backup
+    # if a backup is first loaded and then made anew
+    @property
     def layers_to_seek_masks_from(self) -> Iterable[ArtLayer | LayerSet | None]:
         raise NotImplementedError
 

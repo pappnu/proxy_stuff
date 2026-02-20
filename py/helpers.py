@@ -10,14 +10,12 @@ from typing import Literal
 from photoshop.api import (
     ActionDescriptor,
     ActionReference,
-    DialogModes,
-    RasterizeType,
     SolidColor,
 )
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
 from photoshop.api._layerSet import LayerSet
-from photoshop.api.enumerations import ElementPlacement
+from photoshop.api.enumerations import DialogModes, ElementPlacement, RasterizeType
 
 from src import APP
 from src._config import AppConfig
@@ -207,7 +205,7 @@ def flip_layer(layer: ArtLayer | LayerSet, direction: FlipDirection):
 # https://community.adobe.com/t5/photoshop-ecosystem-discussions/check-if-layer-has-mask/m-p/3702981
 def has_layer_mask(layer: ArtLayer | LayerSet) -> bool:
     ref = ActionReference()
-    ref.putName(APP.instance.cID("Lyr "), layer.name)
+    ref.putIdentifier(APP.instance.sID("layer"), layer.id)
     return APP.instance.executeActionGet(ref).getBoolean(
         APP.instance.sID("hasUserMask")
     )
