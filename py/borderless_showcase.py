@@ -7,18 +7,20 @@ from typing import Literal, NotRequired, TypedDict
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
-from photoshop.api.enumerations import ElementPlacement
+from photoshop.api._selection import Selection
+from photoshop.api.enumerations import BlendMode, ElementPlacement, SelectionType
 
 from src.cards import strip_reminder_text
 from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
 from src.enums.settings import BorderlessTextbox
+from src.helpers.adjustments import create_color_layer
 from src.helpers.bounds import (
     LayerDimensions,
     get_group_dimensions,
     get_layer_dimensions,
 )
-from src.helpers.colors import get_pinline_gradient, get_rgb
+from src.helpers.colors import get_pinline_gradient, get_rgb, rgb_black
 from src.helpers.effects import apply_fx
 from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
 from src.helpers.masks import apply_mask_to_layer_fx
@@ -483,6 +485,40 @@ class BorderlessShowcase(
 
     # endregion Frame Details
 
+    # region Artwork
+
+    @cached_property
+    def art_fill_selection_hook(
+        self,
+    ) -> Callable[[ArtLayer, Selection], None] | None:
+        if (
+            self.bottom_border_type == "Full"
+            and self.art_reference
+            and self.art_reference.name.startswith("Full")
+            and (overflow_ref := self.textbox_overflow_reference_base)
+        ):
+            bounds = overflow_ref.bounds
+
+            def hook(art_layer: ArtLayer, selection: Selection) -> None:
+                # Avoid unnecessary filling at edges if the image reaches that far
+                selection.expand(1)
+                selection.contract(1)
+
+                bounds_art_layer = art_layer.bounds
+                top_padded = bounds[1] - 2
+                area = (
+                    (bounds_art_layer[0], top_padded),
+                    (bounds_art_layer[2], top_padded),
+                    (bounds_art_layer[2], bounds[3]),
+                    (bounds_art_layer[0], bounds[3]),
+                    (bounds_art_layer[0], top_padded),
+                )
+                selection.select(area, selection_type=SelectionType.ExtendSelection)
+
+            return hook
+
+    # endregion Artwork
+
     # region Backup
 
     @property
@@ -693,9 +729,13 @@ class BorderlessShowcase(
         )
 
     @cached_property
+    def textbox_overflow_reference_base(self) -> ArtLayer | None:
+        return getLayer(LAYER_NAMES.OVERFLOW_REFERENCE, self.textbox_reference_group)
+
+    @cached_property
     def textbox_overflow_reference(self) -> ReferenceLayer | None:
         """Text is not allowed to go below the top dimension of this shape."""
-        ref = getLayer(LAYER_NAMES.OVERFLOW_REFERENCE, self.textbox_reference_group)
+        ref = self.textbox_overflow_reference_base
         if self.is_mdfc and ref and self.mdfc_front_bottom_group:
             dims_mdfc = get_layer_dimensions_via_rasterization(
                 self.mdfc_front_bottom_group
@@ -1937,6 +1977,7 @@ class BorderlessShowcase(
     def hooks(self) -> list[Callable[[], None]]:
         hooks = super().hooks
         hooks.append(self.hide_layer_effects_with_pinlines_mask)
+        hooks.append(self.hide_transparencies)
         return hooks
 
     def hide_layer_effects_with_pinlines_mask(self) -> None:
@@ -1944,6 +1985,16 @@ class BorderlessShowcase(
             # Set layer effects to be hidden by pinlines mask
             # in order to ease creating pop-out effects.
             apply_mask_to_layer_fx(self.pinlines_group)
+
+    def hide_transparencies(self) -> None:
+        if self.bottom_border_type == "Full" and self.art_layer:
+            # Create a black layer behind everything else in order
+            # to ensure that there's no transparency in the final image.
+            layer = self.docref.artLayers.add()
+            layer.move(self.art_layer, ElementPlacement.PlaceAfter)
+            create_color_layer(
+                rgb_black(), layer, self.docref, blend_mode=BlendMode.NormalBlend
+            )
 
     # endregion Hooks
 
