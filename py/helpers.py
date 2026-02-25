@@ -284,6 +284,13 @@ def rasterize_layer_style(layer: ArtLayer | LayerSet) -> None:
     APP.instance.executeAction(idrasterizeLayer, desc, DialogModes.DisplayNoDialogs)
 
 
+def collapse_all_groups() -> None:
+    APP.instance.executeAction(
+        APP.instance.sID("collapseAllGroupsEvent"),
+        display_dialogs=DialogModes.DisplayNoDialogs,
+    )
+
+
 def manual_fill(
     render_operation: RenderOperation,
     layer: ArtLayer | None = None,

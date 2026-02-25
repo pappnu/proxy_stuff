@@ -63,6 +63,7 @@ from .helpers import (
     LAYER_NAMES,
     ExpansionSymbolOverrideMode,
     FlipDirection,
+    collapse_all_groups,
     copy_color,
     create_clipping_mask,
     flip_layer,
@@ -1978,6 +1979,9 @@ class BorderlessShowcase(
         hooks = super().hooks
         hooks.append(self.hide_layer_effects_with_pinlines_mask)
         hooks.append(self.hide_transparencies)
+        # Collapse all groups in order to make it easier to access
+        # the layers usually involved in pop-outs
+        hooks.append(collapse_all_groups)
         return hooks
 
     def hide_layer_effects_with_pinlines_mask(self) -> None:
