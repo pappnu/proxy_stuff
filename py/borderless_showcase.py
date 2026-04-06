@@ -27,6 +27,7 @@ from src.helpers.masks import apply_mask_to_layer_fx
 from src.helpers.text import (
     get_font_size,
     get_line_count,
+    override_text_style_ranges,
     set_text_size_and_leading,
 )
 from src.layouts import (
@@ -57,6 +58,7 @@ from src.templates.station import StationMod
 from src.templates.transform import TransformMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
+from src.utils.fonts import is_font_available_in_ps
 
 from .backup import BackupAndRestore
 from .helpers import (
@@ -71,14 +73,16 @@ from .helpers import (
     is_color_identity,
     parse_hex_color_list,
 )
-from .utils.colors import (
-    create_gradient_config,
-    create_gradient_location_map,
-)
+from .utils.colors import create_gradient_config, create_gradient_location_map
 from .utils.layer import TemporaryLayerCopy, get_layer_dimensions_via_rasterization
 from .utils.layer_fx import get_stroke_details
 from .utils.path import check_layer_overlap_with_shape, create_shape_layer
-from .utils.text import align_dimension
+from .utils.text import (
+    LANGUAGE_TO_FONT,
+    align_dimension,
+    find_cjk_sequences,
+    guess_cjk_language,
+)
 from .uxp.path import PathPointConf
 from .uxp.shape import ShapeOperation, merge_shapes
 from .uxp.text import CreateTextLayerWithPathOptions, create_text_layer_with_path
@@ -1095,7 +1099,7 @@ class BorderlessShowcase(
 
     @cached_property
     def pinlines_shapes(self) -> list[ArtLayer | LayerSet | None]:
-        _shape_group = self.pinlines_shape_group
+        shape_group = self.pinlines_shape_group
 
         layers: list[ArtLayer | LayerSet | None] = []
 
@@ -1105,7 +1109,7 @@ class BorderlessShowcase(
                 LAYERS.TRANSFORM
                 if self.is_transform
                 else (LAYERS.MDFC if self.is_mdfc else LAYERS.NORMAL),
-                [_shape_group, LAYERS.NAME],
+                [shape_group, LAYERS.NAME],
             )
         ):
             layers.append(layer)
@@ -1122,12 +1126,12 @@ class BorderlessShowcase(
 
         # Add nickname pinlines if required
         if self.is_nickname and (
-            layer_set := getLayerSet(LAYERS.NICKNAME, _shape_group)
+            layer_set := getLayerSet(LAYERS.NICKNAME, shape_group)
         ):
             layers.append(layer_set)
 
         if self.is_planeswalker:
-            if layer_set := getLayerSet(self.size, _shape_group):
+            if layer_set := getLayerSet(self.size, shape_group):
                 if self.flip_twins and (layer := getLayer(LAYERS.RIGHT, layer_set)):
                     layer.visible = False
                 layers.append(layer_set)
@@ -1379,6 +1383,35 @@ class BorderlessShowcase(
                 self.expansion_symbol_layer,
                 effects,
             )
+
+    def collector_info(self) -> None:
+        super().collector_info()
+
+        if self.text_layer_artist:
+            try:
+                # Assume that only the first artist name form is non-Latin
+                idx = self.layout.artist.index(" / ")
+            except ValueError:
+                idx = 0
+
+            to_style = self.layout.artist[0:idx] if idx else self.layout.artist
+            if (
+                (lang := guess_cjk_language(to_style))
+                and (font := LANGUAGE_TO_FONT[lang])
+                and is_font_available_in_ps(self.app, font)
+                and (ranges := find_cjk_sequences(to_style))
+            ):
+                # Offset pen icon or anything else that might precede the artist name
+                if offset := self.text_layer_artist.textItem.contents.index(
+                    self.layout.artist
+                ):
+                    ranges = [(start + offset, end + offset) for start, end in ranges]
+
+                _logger.debug(
+                    f"Setting font '{font}' to artist text item's character ranges: {ranges}"
+                )
+
+                override_text_style_ranges(self.text_layer_artist, ranges, font=font)
 
     def format_nickname_text(self) -> None:
         pass
