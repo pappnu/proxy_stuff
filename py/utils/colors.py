@@ -1,3 +1,8 @@
+from collections.abc import Sequence
+
+from photoshop.api._artlayer import ArtLayer
+
+from src.helpers.bounds import get_layer_dimensions
 from src.helpers.colors import get_pinline_gradient
 from src.schema.colors import ColorObject, GradientConfig
 
@@ -39,4 +44,23 @@ def create_gradient_config(
     )
     return get_pinline_gradient(
         colors=colors, color_map=color_map, location_map=location_map
+    )
+
+
+def create_gradient_config_for_layer(
+    layer: ArtLayer,
+    document_width: float,
+    color_map: dict[str, ColorObject],
+    colors: Sequence[str],
+):
+    layer_dims = get_layer_dimensions(layer)
+    proportional_width = layer_dims["width"] / document_width
+    gradient_start_offset = (
+        proportional_width / (len(colors) + 1) - proportional_width * 0.05
+    )
+    return create_gradient_config(
+        "".join(colors),
+        color_map,
+        layer_dims["left"] / document_width + gradient_start_offset,
+        layer_dims["right"] / document_width - gradient_start_offset,
     )

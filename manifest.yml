@@ -35,6 +35,7 @@ borderless-showcase.psd:
         - pw_tf_back
         - pw_mdfc_front
         - pw_mdfc_back
+        - prepare
         - adventure
         - saga
         - case

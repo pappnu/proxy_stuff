@@ -2,7 +2,7 @@ from collections.abc import Callable, Iterable, Sequence
 from functools import cached_property
 from logging import getLogger
 from math import ceil
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict, override
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -36,6 +36,7 @@ from src.layouts import (
     LevelerLayout,
     MutateLayout,
     PlaneswalkerLayout,
+    PrepareLayout,
     PrototypeLayout,
     SplitLayout,
     StationLayout,
@@ -52,6 +53,7 @@ from src.templates.adventure import AdventureMod
 from src.templates.leveler import LevelerMod
 from src.templates.normal import BorderlessVectorTemplate
 from src.templates.planeswalker import PlaneswalkerMod
+from src.templates.prepare import PrepareMod
 from src.templates.saga import SagaMod
 from src.templates.split import SplitMod
 from src.templates.station import StationMod
@@ -73,7 +75,7 @@ from .helpers import (
     is_color_identity,
     parse_hex_color_list,
 )
-from .utils.colors import create_gradient_config, create_gradient_location_map
+from .utils.colors import create_gradient_config_for_layer, create_gradient_location_map
 from .utils.layer import TemporaryLayerCopy, get_layer_dimensions_via_rasterization
 from .utils.layer_fx import get_stroke_details
 from .utils.path import check_layer_overlap_with_shape, create_shape_layer
@@ -106,6 +108,7 @@ class BorderlessShowcase(
     SplitMod,
     VerticalMod,
     PlaneswalkerMod,
+    PrepareMod,
     AdventureMod,
     LevelerMod,
     StationMod,
@@ -145,9 +148,7 @@ class BorderlessShowcase(
 
     @cached_property
     def is_content_aware_enabled(self) -> bool:
-        return self.config.get_bool_setting(
-            section="ART", key="Content.Aware.Fill", default=True
-        )
+        return True
 
     @cached_property
     def color_limit(self) -> int:
@@ -262,6 +263,15 @@ class BorderlessShowcase(
     def flip_twins(self) -> bool:
         return self.config.get_bool_setting(
             section="SHAPES", key="Flip.Twins", default=False
+        )
+
+    @cached_property
+    def textbox_size(self) -> str:
+        return self.config.get_option(
+            section="FRAME",
+            key="Textbox.Size",
+            enum_class=BorderlessTextbox,
+            default=BorderlessTextbox.Automatic,
         )
 
     @cached_property
@@ -385,71 +395,37 @@ class BorderlessShowcase(
             return BorderlessTextbox.Tall
 
         if isinstance(self.layout, AdventureLayout):
-            # Get the user's preferred setting
-            size = str(
-                self.config.get_option(
-                    section="FRAME",
-                    key="Textbox.Size",
-                    enum_class=BorderlessTextbox,
-                    default=BorderlessTextbox.Automatic,
-                )
-            )
-
-            # Determine the automatic size
-            if size == BorderlessTextbox.Automatic:
+            if self.textbox_size == BorderlessTextbox.Automatic:
                 if self.text_layer_rules_adventure and self.text_layer_rules_base:
-                    size_map: dict[int, BorderlessTextbox] = {
-                        1: BorderlessTextbox.Short,
-                        2: BorderlessTextbox.Medium,
-                        3: BorderlessTextbox.Normal,
-                        4: BorderlessTextbox.Tall,
-                    }
-
-                    # Determine size for left textbox
-                    test_layer = self.text_layer_rules_adventure
-                    test_text = self.layout.oracle_text_adventure
-                    if self.layout.flavor_text_adventure:
-                        test_text += f"\r{self.layout.flavor_text_adventure}"
-                    test_layer.textItem.contents = test_text.replace("\n", "\r")
-
-                    num = get_line_count(test_layer, self.docref)
-                    if self.layout.flavor_text:
-                        num += 1
-
-                    if num < 4:
-                        size_left = 1
-                    elif num < 6:
-                        size_left = 2
-                    elif num < 8:
-                        size_left = 3
-                    else:
-                        size_left = 4
-
-                    # Determine size for right textbox
-                    test_layer = self.text_layer_rules_base
-                    test_text = self.layout.oracle_text
-                    if self.layout.flavor_text:
-                        test_text += f"\r{self.layout.flavor_text}"
-                    test_layer.textItem.contents = test_text.replace("\n", "\r")
-
-                    num = get_line_count(test_layer, self.docref)
-                    if self.layout.flavor_text:
-                        num += 1
-
-                    if num < 12:
-                        size_right = 1
-                    elif num < 14:
-                        size_right = 2
-                    elif num < 16:
-                        size_right = 3
-                    else:
-                        size_right = 4
-
-                    # Final size is the biggest required
-                    size = size_map[max(size_left, size_right)]
+                    return self._get_dual_textbox_size(
+                        text_layer_1=self.text_layer_rules_adventure,
+                        oracle_text_1=self.layout.oracle_text_adventure,
+                        flavor_text_1=self.layout.flavor_text_adventure,
+                        thresholds_1=(4, 6, 8),
+                        text_layer_2=self.text_layer_rules_base,
+                        oracle_text_2=self.layout.oracle_text,
+                        flavor_text_2=self.layout.flavor_text,
+                        thresholds_2=(12, 14, 16),
+                    )
                 else:
                     return BorderlessTextbox.Tall
-            return size
+            return self.textbox_size
+        elif isinstance(self.layout, PrepareLayout):
+            if self.textbox_size == BorderlessTextbox.Automatic:
+                if self.text_layer_rules_prepare_base and self.text_layer_rules_base:
+                    return self._get_dual_textbox_size(
+                        text_layer_1=self.text_layer_rules_base,
+                        oracle_text_1=self.layout.oracle_text,
+                        flavor_text_1=self.layout.flavor_text,
+                        thresholds_1=(12, 14, 16),
+                        text_layer_2=self.text_layer_rules_prepare_base,
+                        oracle_text_2=self.layout.oracle_text_prepare,
+                        flavor_text_2=self.layout.flavor_text_prepare,
+                        thresholds_2=(4, 6, 8),
+                    )
+                else:
+                    return BorderlessTextbox.Tall
+            return self.textbox_size
         if isinstance(self.layout, PlaneswalkerLayout):
             if self.layout.pw_size > 3:
                 return LAYER_NAMES.PW4
@@ -621,10 +597,6 @@ class BorderlessShowcase(
         return getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group)
 
     @cached_property
-    def adventure_pinlines_group(self) -> LayerSet | None:
-        return getLayerSet(LAYERS.ADVENTURE, self.pinlines_group)
-
-    @cached_property
     def pinlines_shape_group(self) -> LayerSet | None:
         return getLayerSet(LAYERS.SHAPE, self.pinlines_group)
 
@@ -725,11 +697,17 @@ class BorderlessShowcase(
     def textbox_reference_base(self) -> ReferenceLayer | None:
         """
         Top edge should touch the bottom edge of pinline shape.
-        Bottom edge should thouch the bottom edge of allowed text area.
+        Bottom edge should touch the bottom edge of allowed text area.
         Left and right edges should delimit the horizontal centering of text.
         """
         return get_reference_layer(
-            f"{LAYER_NAMES.REFERENCE}{f' - {LAYERS.ADVENTURE} {LAYERS.RIGHT}' if self.is_adventure else ''}",
+            f"{LAYER_NAMES.REFERENCE}{
+                f' - {LAYERS.ADVENTURE} {LAYERS.RIGHT}'
+                if self.is_adventure
+                else f' - {LAYERS.PREPARE} {LAYERS.LEFT}'
+                if self.is_prepare
+                else ''
+            }",
             self.textbox_reference_group,
         )
 
@@ -885,13 +863,13 @@ class BorderlessShowcase(
                     }
                 ]
 
+                # With Adventure and Prepare cards we need to make sure that
+                # both left and right rules texts fit
                 if (
                     isinstance(self.layout, AdventureLayout)
                     and self.text_layer_rules_adventure
                     and self.textbox_reference_adventure_base
                 ):
-                    # With Adventure cards we need to make sure that
-                    # both left and right rules texts fit
                     height_delta = self.textbox_reference_adventure_base.dims["height"]
                     textboxes_to_adjust.append(
                         {
@@ -901,6 +879,23 @@ class BorderlessShowcase(
                             "divider_layer": self.divider_layer,
                             "oracle_text": self.layout.oracle_text_adventure,
                             "flavor_text": self.layout.flavor_text_adventure,
+                            "height_padding": height_delta,
+                        }
+                    )
+                elif (
+                    isinstance(self.layout, PrepareLayout)
+                    and self.text_layer_rules_prepare
+                    and self.textbox_reference_prepare_base
+                ):
+                    height_delta = self.textbox_reference_prepare_base.dims["height"]
+                    textboxes_to_adjust.append(
+                        {
+                            "base_text_layer": self.text_layer_rules_prepare,
+                            "base_textbox_reference": self.textbox_reference_prepare_base,
+                            "base_text_wrap_reference": self.textbox_reference_prepare_base,
+                            "divider_layer": self.divider_layer,
+                            "oracle_text": self.layout.oracle_text_prepare,
+                            "flavor_text": self.layout.flavor_text_prepare,
                             "height_padding": height_delta,
                         }
                     )
@@ -915,10 +910,16 @@ class BorderlessShowcase(
                 ref = textbox_ref
 
                 if self.is_adventure:
-                    rules_text_left, textbox_ref_left = sized_boxes[1]
+                    rules_text, textbox_ref = sized_boxes[1]
 
-                    self.text_layer_rules_adventure = rules_text_left
-                    self.textbox_reference_adventure = textbox_ref_left
+                    self.text_layer_rules_adventure = rules_text
+                    self.textbox_reference_adventure = textbox_ref
+                elif self.is_prepare:
+                    rules_text, textbox_ref = sized_boxes[1]
+
+                    self.text_layer_rules_prepare = rules_text
+                    self.textbox_reference_prepare = textbox_ref
+
         elif (
             not self.is_textless
             and self.supports_dynamic_textbox_height
@@ -942,20 +943,7 @@ class BorderlessShowcase(
             )
 
         if ref:
-            if (
-                self.is_mdfc and self.textbox_overflow_reference
-                # and (
-                #     mdfc_mask := getLayer(
-                #         LAYERS.MDFC, [self.mask_group, LAYERS.TEXTBOX_REFERENCE]
-                #     )
-                # )
-            ):
-                # copy_layer_mask(layer_from=mdfc_mask, layer_to=ref)
-                # try:
-                #     apply_mask(ref)
-                # except COMError as err:
-                #     print("Failed to apply MDFC mask", err)
-                # ref.visible = False
+            if self.is_mdfc and self.textbox_overflow_reference:
                 duplicate = self.textbox_overflow_reference.duplicate(
                     ref, ElementPlacement.PlaceBefore
                 )
@@ -998,6 +986,52 @@ class BorderlessShowcase(
                     hide=True,
                 )
             )
+
+    @cached_property
+    def textbox_reference_prepare_base(self) -> ReferenceLayer | None:
+        """
+        Bottom edge should thouch the bottom edge of allowed text area.
+        Height should indicate how much shorter the right textbox of a Prepare card is
+        in comparison to its left textbox, i.e. how much space Prepare name and typeline take.
+        Left and right edges should delimit the horizontal centering of text.
+        """
+        return get_reference_layer(
+            f"{LAYER_NAMES.REFERENCE} - {LAYERS.PREPARE} {LAYERS.RIGHT}",
+            self.textbox_reference_group,
+        )
+
+    @cached_property
+    def textbox_reference_prepare(self) -> ArtLayer | None:
+        if self.textbox_reference and self.textbox_reference_prepare_base:
+            dims_textbox_ref = self.textbox_reference.dims
+            dims_base_ref = self.textbox_reference_prepare_base.dims
+            top = (
+                dims_textbox_ref["top"]
+                + dims_base_ref["height"]
+                + self.rules_text_padding / 2
+            )
+            bottom = dims_textbox_ref["bottom"] - self.rules_text_padding / 2
+
+            ref_shape = create_shape_layer(
+                (
+                    {"x": dims_base_ref["left"], "y": top},
+                    {"x": dims_base_ref["right"], "y": top},
+                    {"x": dims_base_ref["right"], "y": bottom},
+                    {"x": dims_base_ref["left"], "y": bottom},
+                ),
+                hide=True,
+            )
+
+            if self.is_pt_enabled and self.pt_reference:
+                pt_ref = self.pt_reference.duplicate(
+                    ref_shape, ElementPlacement.PlaceBefore
+                )
+                ref_shape = merge_shapes(
+                    pt_ref, ref_shape, operation=ShapeOperation.SubtractFront
+                )
+                ref_shape.visible = False
+
+            return ReferenceLayer(ref_shape)
 
     @cached_property
     def textless_bottom_reference_layer(self) -> ReferenceLayer | None:
@@ -1202,6 +1236,8 @@ class BorderlessShowcase(
         methods = super().frame_layer_methods
         if self.is_adventure:
             methods.append(self.enable_adventure_layers)
+        if self.is_prepare:
+            methods.append(self.enable_prepare_layers)
         if self.is_leveler:
             methods.append(self.frame_layers_leveler)
         if self.is_prototype:
@@ -1226,7 +1262,13 @@ class BorderlessShowcase(
 
     @cached_property
     def text_layer_rules_name(self) -> str:
-        return f"{LAYERS.RULES_TEXT}{f' - {LAYERS.ADVENTURE} {LAYERS.RIGHT}' if self.is_adventure else ''}"
+        return f"{LAYERS.RULES_TEXT}{
+            f' - {LAYERS.ADVENTURE} {LAYERS.RIGHT}'
+            if self.is_adventure
+            else f' - {LAYERS.PREPARE}'
+            if self.is_prepare
+            else ''
+        }"
 
     @cached_property
     def text_layer_rules_base(self) -> ArtLayer | None:
@@ -1288,26 +1330,6 @@ class BorderlessShowcase(
         if self.is_layout_saga:
             return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, self.saga_group)
         return getLayer(LAYERS.FLIPSIDE_POWER_TOUGHNESS, self.text_group)
-
-    @cached_property
-    def text_layer_name_adventure(self) -> ArtLayer | None:
-        return getLayer(LAYERS.NAME_ADVENTURE, self.rules_text_group)
-
-    @cached_property
-    def text_layer_mana_adventure(self) -> ArtLayer | None:
-        return getLayer(LAYERS.MANA_COST_ADVENTURE, self.rules_text_group)
-
-    @cached_property
-    def text_layer_type_adventure(self) -> ArtLayer | None:
-        return getLayer(LAYERS.TYPE_LINE_ADVENTURE, self.rules_text_group)
-
-    @cached_property
-    def text_layer_rules_adventure(self) -> ArtLayer | None:
-        return getLayer(LAYERS.RULES_TEXT_ADVENTURE, self.rules_text_group)
-
-    @cached_property
-    def divider_layer_adventure(self) -> ArtLayer | None:
-        return None
 
     def expansion_symbol_handler(self) -> None:
         if self.expansion_symbol_layer:
@@ -1966,6 +1988,15 @@ class BorderlessShowcase(
                     ):
                         if layer:
                             layer.translate(0, delta)
+                elif self.is_prepare:
+                    for layer in (
+                        self.text_layer_name_prepare,
+                        self.text_layer_mana_prepare,
+                        self.text_layer_type_prepare,
+                        self.prepare_pinlines_group,
+                    ):
+                        if layer:
+                            layer.translate(0, delta)
 
     def pw_enable_loyalty_graphics(self) -> None:
         if self.is_planeswalker and self.loyalty_group:
@@ -1993,6 +2024,8 @@ class BorderlessShowcase(
             methods.remove(self.pw_layer_positioning)
         if self.is_adventure and not self.rules_text_font_size:
             methods.append(self.match_adventure_font_sizes)
+        if self.is_prepare and not self.rules_text_font_size:
+            methods.append(self.match_prepare_font_sizes)
         if self.is_prototype:
             methods.insert(0, self.post_text_layers_prototype)
             if self.textbox_positioning not in methods:
@@ -2060,31 +2093,45 @@ class BorderlessShowcase(
     # region Adventure
 
     @cached_property
-    def adventure_pinlines_colors(
-        self,
-    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
-        if isinstance(self.layout, AdventureLayout) and self.adventure_pinlines:
-            adventure_pinline_dims = get_layer_dimensions(self.adventure_pinlines)
-            proportional_pinlines_width = (
-                adventure_pinline_dims["width"] / self.doc_width
-            )
-            gradient_start_offset = (
-                proportional_pinlines_width
-                / (len(self.layout.color_identity_adventure) + 1)
-                - proportional_pinlines_width * 0.05
-            )
-            return create_gradient_config(
-                "".join(self.layout.color_identity_adventure),
-                self.pinlines_color_map,
-                adventure_pinline_dims["left"] / self.doc_width + gradient_start_offset,
-                adventure_pinline_dims["right"] / self.doc_width
-                - gradient_start_offset,
-            )
-        return (0, 0, 0)
+    def adventure_pinlines_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.ADVENTURE, self.pinlines_group)
 
     @cached_property
     def adventure_pinlines(self) -> ArtLayer | None:
         return getLayer(LAYERS.ADVENTURE, self.adventure_pinlines_group)
+
+    @cached_property
+    def adventure_pinlines_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
+        if isinstance(self.layout, AdventureLayout) and self.adventure_pinlines:
+            return create_gradient_config_for_layer(
+                self.adventure_pinlines,
+                self.doc_width,
+                self.pinlines_color_map,
+                self.layout.color_identity_adventure,
+            )
+        return (0, 0, 0)
+
+    @cached_property
+    def text_layer_name_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.NAME_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_mana_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.MANA_COST_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_type_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.TYPE_LINE_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_rules_adventure(self) -> ArtLayer | None:
+        return getLayer(LAYERS.RULES_TEXT_ADVENTURE, self.rules_text_group)
+
+    @cached_property
+    def divider_layer_adventure(self) -> ArtLayer | None:
+        return None
 
     def enable_adventure_layers(self) -> None:
         if isinstance(self.layout, AdventureLayout) and self.adventure_pinlines_group:
@@ -2094,58 +2141,106 @@ class BorderlessShowcase(
                 colors=self.adventure_pinlines_colors,
             )
 
+    @override
     def text_layers_adventure(self) -> None:
         super().text_layers_adventure()
 
         if self.rules_text_font_size and self.text_layer_rules_adventure:
             # Ensure that rules text font size won't be adjusted
-            for entry in self.text:
-                if (
-                    isinstance(entry, FormattedTextArea)
-                    and entry.layer is self.text_layer_rules_adventure
-                ):
-                    self.disable_text_area_scaling(entry)
-                    break
+            self._disable_text_scaling_for_layer(self.text_layer_rules_adventure)
 
     def match_adventure_font_sizes(self) -> None:
         """Sets the same font size for both Adventure rules texts."""
         if self.text_layer_rules_adventure and self.text_layer_rules:
-            if get_font_size(self.text_layer_rules_adventure) == get_font_size(
-                self.text_layer_rules
-            ):
-                return
-
-            rules_text_layers = [self.text_layer_rules_adventure, self.text_layer_rules]
-            rules_text_layers.sort(key=lambda layer: get_font_size(layer))
-            layer_to_adjust = rules_text_layers[1]
-
-            for entry in self.text:
-                if (
-                    isinstance(entry, FormattedTextArea)
-                    and entry.layer is layer_to_adjust
-                ):
-                    smaller_font_size: float | int = get_font_size(rules_text_layers[0])
-                    set_text_size_and_leading(
-                        layer_to_adjust, smaller_font_size, smaller_font_size
-                    )
-                    text_area = FormattedTextArea(
-                        layer_to_adjust,
-                        contents=entry.contents,
-                        **{
-                            **entry.kwargs,
-                            "scale_height": False,
-                            "scale_width": False,
-                            "fix_overflow_height": False,
-                            "fix_overflow_width": False,
-                        },
-                    )
-                    if text_area.validate():
-                        # It's enough to reposition the text since it's already formatted.
-                        # Reformatting actually breaks the styling of the text.
-                        text_area.position_within_reference()
-                    break
+            self._match_font_sizes(
+                self.text_layer_rules_adventure, self.text_layer_rules
+            )
 
     # endregion Adventure
+
+    # region Prepare
+
+    @cached_property
+    def prepare_pinlines_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.PREPARE, self.pinlines_group)
+
+    @cached_property
+    def prepare_pinlines(self) -> ArtLayer | None:
+        return getLayer(LAYERS.PREPARE, self.prepare_pinlines_group)
+
+    @cached_property
+    def prepare_pinlines_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
+        if isinstance(self.layout, PrepareLayout) and self.prepare_pinlines:
+            return create_gradient_config_for_layer(
+                self.prepare_pinlines,
+                self.doc_width,
+                self.pinlines_color_map,
+                self.layout.colors_prepare,
+            )
+        return (0, 0, 0)
+
+    @cached_property
+    def text_layer_name_prepare(self) -> ArtLayer | None:
+        return getLayer(LAYERS.NAME_PREPARE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_mana_prepare(self) -> ArtLayer | None:
+        return getLayer(LAYERS.MANA_COST_PREPARE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_type_prepare(self) -> ArtLayer | None:
+        return getLayer(LAYERS.TYPE_LINE_PREPARE, self.rules_text_group)
+
+    @cached_property
+    def text_layer_rules_prepare_base(self) -> ArtLayer | None:
+        return getLayer(
+            f"{LAYERS.RULES_TEXT_PREPARE} {LAYERS.RIGHT}", self.rules_text_group
+        )
+
+    @cached_property
+    def text_layer_rules_prepare(self) -> ArtLayer | None:
+        if (
+            not (self.supports_dynamic_textbox_height and self.rules_text_font_size)
+            and self.text_layer_rules_prepare_base
+            and self.textbox_reference_prepare
+        ):
+            return create_text_layer_with_path(
+                self.textbox_reference_prepare.duplicate(
+                    self.text_layer_rules_prepare_base, ElementPlacement.PlaceAfter
+                ),
+                self.text_layer_rules_prepare_base,
+                **self.rules_text_default_options,
+            )
+        return self.text_layer_rules_prepare_base
+
+    @cached_property
+    def divider_layer_prepare(self) -> ArtLayer | None:
+        return None
+
+    def enable_prepare_layers(self) -> None:
+        if isinstance(self.layout, PrepareLayout) and self.prepare_pinlines_group:
+            self.prepare_pinlines_group.visible = True
+            self.generate_layer(
+                group=self.prepare_pinlines_group,
+                colors=self.prepare_pinlines_colors,
+            )
+
+    @override
+    def text_layers_prepare(self) -> None:
+        super().text_layers_prepare()
+
+        if self.rules_text_font_size and self.text_layer_rules_prepare:
+            # Ensure that rules text font size won't be adjusted
+            self._disable_text_scaling_for_layer(self.text_layer_rules_prepare)
+
+    def match_prepare_font_sizes(self) -> None:
+        """Sets the same font size for both Prepare rules texts."""
+        if self.text_layer_rules_prepare and self.text_layer_rules:
+            self._match_font_sizes(self.text_layer_rules_prepare, self.text_layer_rules)
+
+    # endregion Prepare
 
     # region Leveler
 
@@ -2595,3 +2690,136 @@ class BorderlessShowcase(
             return super().layer_positioning_station()
 
     # endregion Station
+
+    # region Utils
+
+    def _get_textbox_size_from_line_count(
+        self,
+        line_count: int,
+        thresholds: tuple[int, int, int],
+    ) -> int:
+        """
+        Determines the size index (1-4) based on line count and thresholds.
+
+        Args:
+            line_count: Number of lines in the text
+            thresholds: Tuple of (threshold1, threshold2, threshold3) for sizes 1, 2, 3, 4
+
+        Returns:
+            Size index: 1 (Short), 2 (Medium), 3 (Normal), or 4 (Tall)
+        """
+        if line_count < thresholds[0]:
+            return 1
+        elif line_count < thresholds[1]:
+            return 2
+        elif line_count < thresholds[2]:
+            return 3
+        else:
+            return 4
+
+    def _get_dual_textbox_size(
+        self,
+        text_layer_1: ArtLayer,
+        oracle_text_1: str,
+        flavor_text_1: str | None,
+        thresholds_1: tuple[int, int, int],
+        text_layer_2: ArtLayer,
+        oracle_text_2: str,
+        flavor_text_2: str | None,
+        thresholds_2: tuple[int, int, int],
+    ) -> str:
+        """
+        Determines the textbox size for dual-textbox layouts.
+
+        Measures line counts for both textboxes using their respective thresholds,
+        then returns the bigger required size.
+
+        Args:
+            text_layer_1: First textbox layer
+            oracle_text_1: Oracle text for first textbox
+            flavor_text_1: Flavor text for first textbox (optional)
+            thresholds_1: Size thresholds for first textbox
+            text_layer_2: Second textbox layer
+            oracle_text_2: Oracle text for second textbox
+            flavor_text_2: Flavor text for second textbox (optional)
+            thresholds_2: Size thresholds for second textbox
+
+        Returns:
+            Determined size
+        """
+        size_map: dict[int, BorderlessTextbox] = {
+            1: BorderlessTextbox.Short,
+            2: BorderlessTextbox.Medium,
+            3: BorderlessTextbox.Normal,
+            4: BorderlessTextbox.Tall,
+        }
+
+        # Determine size for first textbox
+        test_text = oracle_text_1
+        if flavor_text_1:
+            test_text += f"\r{flavor_text_1}"
+        text_layer_1.textItem.contents = test_text.replace("\n", "\r")
+        num_1 = get_line_count(text_layer_1, self.docref)
+        if flavor_text_1:
+            num_1 += 1
+        size_1 = self._get_textbox_size_from_line_count(num_1, thresholds_1)
+
+        # Determine size for second textbox
+        test_text = oracle_text_2
+        if flavor_text_2:
+            test_text += f"\r{flavor_text_2}"
+        text_layer_2.textItem.contents = test_text.replace("\n", "\r")
+        num_2 = get_line_count(text_layer_2, self.docref)
+        if flavor_text_2:
+            num_2 += 1
+        size_2 = self._get_textbox_size_from_line_count(num_2, thresholds_2)
+
+        # Final size is the biggest required
+        return str(size_map[max(size_1, size_2)])
+
+    def _disable_text_scaling_for_layer(self, layer: ArtLayer) -> None:
+        for entry in self.text:
+            if isinstance(entry, FormattedTextArea) and entry.layer is layer:
+                self.disable_text_area_scaling(entry)
+                break
+
+    def _match_font_sizes(self, *layers: ArtLayer) -> None:
+        if len(layers) < 2:
+            return
+
+        layers_and_sizes = [(layer, get_font_size(layer)) for layer in layers]
+
+        first_size = layers_and_sizes[0][1]
+        if not any(entry[1] != first_size for entry in layers_and_sizes):
+            return
+
+        layers_and_sizes.sort(key=lambda entry: entry[1])
+        layers_to_adjust = [entry[0] for entry in layers_and_sizes]
+        smallest_font_size = layers_and_sizes[0][1]
+
+        for entry in self.text:
+            if isinstance(entry, FormattedTextArea) and entry.layer in layers_to_adjust:
+                set_text_size_and_leading(
+                    entry.layer, smallest_font_size, smallest_font_size
+                )
+                text_area = FormattedTextArea(
+                    entry.layer,
+                    contents=entry.contents,
+                    **{
+                        **entry.kwargs,
+                        "scale_height": False,
+                        "scale_width": False,
+                        "fix_overflow_height": False,
+                        "fix_overflow_width": False,
+                    },
+                )
+                if text_area.validate():
+                    # It's enough to reposition the text since it's already formatted.
+                    # Reformatting actually breaks the styling of the text.
+                    text_area.position_within_reference()
+
+                layers_to_adjust.remove(entry.layer)
+                if not layers_to_adjust:
+                    break
+
+    # endregion Utils
