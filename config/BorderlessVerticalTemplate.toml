@@ -83,15 +83,41 @@ default = 0
 
 [COLORS."Color.Typeline"]
 title = "Color Typeline"
-desc = """When enabled, the Type box is colored according to the card's color identity."""
-type = "bool"
-default = 0
+desc = """Whether to color the Type box according to the card's color identity or not.
+Automatic colors the Type box when Glow is enabled but not otherwise."""
+type = "options"
+default = "Automatic"
+options = ["Automatic", "Yes", "No"]
 
 [COLORS."Color.Textbox"]
 title = "Color Textbox"
 desc = """When enabled, the Textbox is colored according to the card's color identity."""
 type = "bool"
 default = 0
+
+[COLORS."Color.Textbox.Glow"]
+title = "Textbox Inner Glow"
+desc = """When enabled, the Textbox's color fill is masked so that an inner ring is left to the borders."""
+type = "bool"
+default = 0
+
+[COLORS."Color.Textbox.Glow.Contract"]
+title = "Textbox Inner Glow Contract"
+desc = """How much to contract the selection that will be used as the glow mask. Before contracting, the selection covers the textbox."""
+type = "int"
+default = 100
+
+[COLORS."Color.Textbox.Glow.Smooth"]
+title = "Textbox Inner Glow Smooth"
+desc = """How much to smooth the selection that will be used as the glow mask."""
+type = "int"
+default = 60
+
+[COLORS."Color.Textbox.Glow.Feather"]
+title = "Textbox Inner Glow Feather"
+desc = """How much to feather the selection that will be used as the glow mask."""
+type = "int"
+default = 50
 
 [COLORS."Artifact.Color.Mode"]
 title = "Artifact Colored Elements"

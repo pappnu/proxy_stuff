@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from enum import StrEnum
 from functools import cached_property
 
 from photoshop.api import SolidColor
@@ -10,22 +10,42 @@ from src.enums.layers import LAYERS
 from src.helpers.colors import get_rgb
 from src.helpers.effects import enable_layer_fx
 from src.helpers.layers import getLayer, getLayerSet
-from src.helpers.masks import apply_mask_to_layer_fx
+from src.helpers.masks import (
+    MaskSelectionBehaviour,
+    apply_mask_to_layer_fx,
+    create_mask,
+    delete_mask_from_solid_color_layer,
+)
+from src.helpers.selection import select_layer_pixels
 from src.templates._vector import MaskAction
 from src.templates.normal import BorderlessVectorTemplate
-from src.utils.adobe import LayerObjectTypes
 
 from .helpers import LAYER_NAMES, create_clipping_mask, find_art_layer
 from .vertical_mod import VerticalMod
+
+
+class TypelineColorOptions(StrEnum):
+    AUTOMATIC = "Automatic"
+    YES = "Yes"
+    NO = "No"
 
 
 class BorderlessVertical(VerticalMod):
     # region Settings
 
     @cached_property
-    def color_typeline(self) -> bool:
-        return self.config.get_bool_setting(
-            section="COLORS", key="Color.Typeline", default=False
+    def color_typeline(self) -> TypelineColorOptions:
+        return self.config.get_option(
+            section="COLORS",
+            key="Color.Typeline",
+            enum_class=TypelineColorOptions,
+            default=TypelineColorOptions.AUTOMATIC,
+        )
+
+    @cached_property
+    def should_color_typeline(self) -> bool:
+        return self.color_typeline == TypelineColorOptions.YES or (
+            self.color_typeline == TypelineColorOptions.AUTOMATIC and self.textbox_glow
         )
 
     @cached_property
@@ -34,9 +54,37 @@ class BorderlessVertical(VerticalMod):
             section="COLORS", key="Color.Textbox", default=False
         )
 
+    @cached_property
+    def textbox_glow(self) -> bool:
+        return self.config.get_bool_setting(
+            section="COLORS", key="Color.Textbox.Glow", default=True
+        )
+
+    @cached_property
+    def textbox_glow_contract(self) -> int:
+        return self.config.get_int_setting(
+            section="COLORS", key="Color.Textbox.Glow.Contract", default=0
+        )
+
+    @cached_property
+    def textbox_glow_smooth(self) -> int:
+        return self.config.get_int_setting(
+            section="COLORS", key="Color.Textbox.Glow.Smooth", default=0
+        )
+
+    @cached_property
+    def textbox_glow_feather(self) -> int:
+        return self.config.get_int_setting(
+            section="COLORS", key="Color.Textbox.Glow.Feather", default=0
+        )
+
     # endregion Settings
 
     # region Groups
+
+    @cached_property
+    def typeline_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.TYPE_LINE, (self.twins_group, LAYERS.SHAPE))
 
     @cached_property
     def pt_group(self) -> LayerSet | None:
@@ -67,7 +115,7 @@ class BorderlessVertical(VerticalMod):
         return super().twins_shapes
 
     @cached_property
-    def textbox_shape(self) -> LayerObjectTypes | list[LayerObjectTypes] | None:
+    def textbox_shape(self) -> ArtLayer | None:
         if self.is_vertical_layout:
             return getLayer(
                 self.vertical_mode_layer_name,
@@ -192,7 +240,6 @@ class BorderlessVertical(VerticalMod):
         super().enable_frame_layers()
 
         if self.is_creature and self.pt_group:
-            layer: ArtLayer
             # Remove unwanted group wide color fill
             for layer in self.pt_group.artLayers:
                 if " Fill " in layer.name:
@@ -206,6 +253,67 @@ class BorderlessVertical(VerticalMod):
                 self.generate_layer(
                     group=self.pt_inner_shape, colors=self.pt_inner_colors
                 )
+
+        # Fix twins coloring
+        if (
+            self.twins_group
+            and (
+                layer := find_art_layer(
+                    self.twins_group, lambda layer: " Fill " in layer.name
+                )
+            )
+            and (
+                ref := getLayerSet(
+                    LAYER_NAMES.CARD_NAME, [self.twins_group, LAYERS.SHAPE]
+                )
+            )
+        ):
+            layer.move(
+                ref,
+                ElementPlacement.PlaceBefore,
+            )
+
+            if self.should_color_typeline and self.typeline_group:
+                layer_copy = layer.duplicate(
+                    self.typeline_group, ElementPlacement.PlaceBefore
+                )
+                create_clipping_mask(layer_copy)
+
+            create_clipping_mask(layer)
+
+        # Handle textbox coloring and optional glow
+        if (
+            self.textbox_glow
+            and self.textbox_shape
+            and self.textbox_group
+            and (
+                color_layer := find_art_layer(
+                    self.textbox_group,
+                    lambda layer: " Fill " in layer.name,
+                )
+            )
+        ):
+            delete_mask_from_solid_color_layer(color_layer)
+            selection = select_layer_pixels(self.textbox_shape)
+            selection.contract(self.textbox_glow_contract)
+            selection.smooth(self.textbox_glow_smooth)
+            selection.feather(self.textbox_glow_feather)
+            create_mask(
+                color_layer,
+                selection_behaviour=MaskSelectionBehaviour.HIDE_SELECTION,
+            )
+        elif (
+            not self.color_textbox
+            and not self.textbox_glow
+            and self.textbox_group
+            and (
+                layer := find_art_layer(
+                    self.textbox_group,
+                    lambda layer: " Fill " in layer.name,
+                )
+            )
+        ):
+            layer.remove()
 
     # endregion Colors
 
@@ -221,7 +329,11 @@ class BorderlessVertical(VerticalMod):
         if self.is_authentic_front and self.text_layer_name:
             self.set_layer_font_color(self.text_layer_name)
 
-        if self.is_authentic_front and self.color_typeline and self.text_layer_type:
+        if (
+            self.is_authentic_front
+            and self.should_color_typeline
+            and self.text_layer_type
+        ):
             self.set_layer_font_color(self.text_layer_type)
 
         if (
@@ -240,46 +352,6 @@ class BorderlessVertical(VerticalMod):
         return super().text_layer_pt
 
     # endregion Text
-
-    # region Hooks
-
-    def disable_colors(self) -> None:
-        if (
-            not self.color_textbox
-            and self.textbox_group
-            and (
-                layer := find_art_layer(
-                    self.textbox_group,
-                    lambda layer: " Fill " in layer.name,
-                )
-            )
-        ):
-            layer.remove()
-        if (
-            not self.color_typeline
-            and self.twins_group
-            and (
-                layer := find_art_layer(
-                    self.twins_group, lambda layer: " Fill " in layer.name
-                )
-            )
-            and (
-                ref := getLayerSet(
-                    LAYER_NAMES.CARD_NAME, [self.twins_group, LAYERS.SHAPE]
-                )
-            )
-        ):
-            layer.move(
-                ref,
-                ElementPlacement.PlaceBefore,
-            )
-            create_clipping_mask(layer)
-
-    @cached_property
-    def hooks(self) -> list[Callable[[], None]]:
-        return [*super().hooks, self.disable_colors]
-
-    # endregion Hooks
 
     # region Saga
 
