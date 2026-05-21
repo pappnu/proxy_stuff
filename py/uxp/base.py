@@ -3,7 +3,8 @@ from json import dumps
 from pathlib import Path
 from typing import Any
 
-from photoshop.api import ActionDescriptor, DialogModes
+from photoshop.api import ActionDescriptor
+from photoshop.api.enumerations import DialogModes
 
 from src import APP
 from src._state import PATH

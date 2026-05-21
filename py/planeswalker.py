@@ -1,15 +1,10 @@
 from collections.abc import Callable, Sequence
 from functools import cached_property
 
-from photoshop.api import (
-    ActionDescriptor,
-    ActionReference,
-    DialogModes,
-    ElementPlacement,
-    SolidColor,
-)
+from photoshop.api import ActionDescriptor, ActionReference, SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
+from photoshop.api.enumerations import DialogModes, ElementPlacement
 
 import src.helpers as psd
 from src.enums.layers import LAYERS

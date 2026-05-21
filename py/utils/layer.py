@@ -1,9 +1,9 @@
 from contextlib import AbstractContextManager
 from types import TracebackType
 
-from photoshop.api import ElementPlacement, RasterizeType
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
+from photoshop.api.enumerations import ElementPlacement, RasterizeType
 
 from src.helpers.bounds import (
     LayerDimensions,

@@ -1,7 +1,7 @@
 from enum import Enum, StrEnum
 from typing import Literal
 
-from fontTools.ttLib import TTFont
+from fontTools.ttLib import TTFont  # pyright: ignore[reportMissingTypeStubs]
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 

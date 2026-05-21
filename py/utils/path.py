@@ -1,10 +1,10 @@
 from collections.abc import Iterable
 from typing import Any
 
-from photoshop.api import ActionDescriptor, ActionReference, DialogModes
+from photoshop.api import ActionDescriptor, ActionReference
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
-from photoshop.api.enumerations import ElementPlacement
+from photoshop.api.enumerations import DialogModes, ElementPlacement
 
 from src import APP
 from src.helpers.bounds import LayerBounds, LayerDimensions, get_dimensions_from_bounds
