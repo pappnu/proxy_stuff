@@ -11,7 +11,7 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
 
 ## Requirements
 
-- A version of [Proxyshop](https://github.com/Investigamer/Proxyshop) that matches it's main-branch and has all of my pull requests merged to it (not all of them are vital, but this is the setup I test my plugin with). I provide [an unofficial development build of Proxyshop](https://github.com/pappnu/Proxyshop/releases) that fulfills this criteria.
+- [My unofficial development build of Proxyshop](https://github.com/pappnu/Proxyshop/releases). I have submitted the required changes to be merged to the official Proxyshop, but as long as the original maintainer won't proceed with the review process the official version will remain incompatible. It's also not advisable to keep waiting for the merge to the official version as some of my PRs have been waiting for feedback for over a year as of 2026-05-21.
 - Photoshop 23.5 or newer
 
 ## Installation
@@ -26,7 +26,7 @@ A plugin for additional [Proxyshop](https://github.com/Investigamer/Proxyshop) t
    ├── Proxyshop.exe
    └── ...
    ```
-2. Download the templates via Proxyshop's updater or manually from [here](https://drive.google.com/drive/folders/1Q4JgzLOWCocjh56MKTfHgSPGMS-QQtOL).
+2. Download the templates via Proxyshop's updater (recommended) or manually from [here](https://drive.google.com/drive/folders/1Q4JgzLOWCocjh56MKTfHgSPGMS-QQtOL). Manually downloaded templates (.psd files) should be placed at `/path/to/your/Proxyshop/plugins/proxy_stuff/templates` directory.
 3. Look at the [Troubleshooting](#troubleshooting) section as it is quite likely that you will encounter at least the *'Confirmation dialog halts the rendering'* problem.
 
 ## Troubleshooting
