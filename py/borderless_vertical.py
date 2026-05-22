@@ -295,6 +295,10 @@ class BorderlessVertical(VerticalMod):
         ):
             delete_mask_from_solid_color_layer(color_layer)
             selection = select_layer_pixels(self.textbox_shape)
+            if self.has_extra_textbox and self.bottom_textbox_shape:
+                selection = select_layer_pixels(
+                    self.bottom_textbox_shape, add_to_selection=True
+                )
             selection.contract(self.textbox_glow_contract)
             selection.smooth(self.textbox_glow_smooth)
             selection.feather(self.textbox_glow_feather)
