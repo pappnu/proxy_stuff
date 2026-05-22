@@ -124,36 +124,54 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             )
             pinlines_stroke_size = pinlines_stroke["size"] if pinlines_stroke else 0
             ref_textbox_dims = get_shape_dimensions(ref_textbox)
+            textbox_left = ref_textbox_dims["left"] + pinlines_stroke_size
+            textbox_right = ref_textbox_dims["right"] - pinlines_stroke_size
             textbox_bottom = ref_textbox_dims["bottom"] - pinlines_stroke_size
             textbox_top = textbox_bottom - self.textbox_height
 
             # Build bottom textbox
             self.bottom_textbox_shape = create_shape_layer(
                 (
-                    {
-                        "x": ref_textbox_dims["left"] + pinlines_stroke_size,
-                        "y": textbox_top,
-                    },
-                    {
-                        "x": ref_textbox_dims["right"] - pinlines_stroke_size,
-                        "y": textbox_top,
-                    },
-                    {
-                        "x": ref_textbox_dims["right"] - pinlines_stroke_size,
-                        "y": textbox_bottom,
-                    },
-                    {
-                        "x": ref_textbox_dims["left"] + pinlines_stroke_size,
-                        "y": textbox_bottom,
-                    },
+                    {"x": textbox_left, "y": textbox_top},
+                    {"x": textbox_right, "y": textbox_top},
+                    {"x": textbox_right, "y": textbox_bottom},
+                    {"x": textbox_left, "y": textbox_bottom},
                 ),
                 relative_layer=ref_textbox,
                 placement=ElementPlacement.PlaceAfter,
             )
 
-            if self.text_layer_ability and self.pt_reference:
+            if (
+                self.text_layer_ability
+                and self.pt_reference
+                and self.textbox_reference_inner_stroked
+            ):
                 # Build bottom text layer
-                text_shape = self.bottom_textbox_shape.duplicate()
+                text_shape = create_shape_layer(
+                    (
+                        {
+                            "x": self.textbox_reference_inner_stroked.bounds[0],
+                            "y": textbox_top,
+                        },
+                        {
+                            "x": self.textbox_reference_inner_stroked.bounds[2],
+                            "y": textbox_top,
+                        },
+                        {
+                            "x": self.textbox_reference_inner_stroked.bounds[2],
+                            "y": textbox_bottom,
+                        },
+                        {
+                            "x": self.textbox_reference_inner_stroked.bounds[0],
+                            "y": textbox_bottom,
+                        },
+                    )
+                )
+                text_shape_copy = text_shape.duplicate(
+                    self.textbox_reference_inner_stroked, ElementPlacement.PlaceAfter
+                )
+                text_shape_copy.visible = False
+                self.textbox_bottom_reference = ReferenceLayer(text_shape_copy)
                 pt_reference = self.pt_reference.duplicate(
                     relativeObject=text_shape,
                     insertionLocation=ElementPlacement.PlaceBefore,
@@ -325,6 +343,10 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         return super(SagaMod, self).art_reference
 
     @cached_property
+    def textbox_reference_inner_stroked(self) -> ReferenceLayer | None:
+        return get_reference_layer("Inner Stroked", self.textbox_reference_group)
+
+    @cached_property
     def textbox_reference(self) -> ReferenceLayer | None:
         if self.is_vertical_layout:
             if self.has_extra_textbox:
@@ -359,9 +381,7 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
         # TODO Build a new reference shape based on MDFC element dimensions
         # instead of relying on a mask.
-        ref = get_reference_layer(
-            self.size, getLayerSet(LAYERS.TEXTBOX_REFERENCE, self.text_group)
-        )
+        ref = get_reference_layer(self.size, self.textbox_reference_group)
         if (
             self.is_mdfc
             and ref
@@ -402,6 +422,16 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # endregion Raster layers
 
     # region Shapes
+
+    @cached_property
+    def divider_layer(self) -> ArtLayer | LayerSet | None:
+        if (
+            self.has_extra_textbox
+            and isinstance(self.layout, SagaLayout)
+            and not (self.layout.ability_text and self.layout.flavor_text)
+        ):
+            return None
+        return super().divider_layer
 
     @cached_property
     def pinlines_shapes(self) -> list[ArtLayer | LayerSet | None]:
@@ -630,14 +660,15 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             and self.text_layer_ability_bottom
             and isinstance(self.layout, SagaLayout)
         ):
-            self.text += [
+            self.text.append(
                 FormattedTextArea(
                     self.text_layer_ability_bottom,
                     contents=self.layout.ability_text,
+                    flavor=self.layout.flavor_text,
                     centered=True,
                     reference=self.textbox_bottom_reference,
                 )
-            ]
+            )
         return (
             super() if self.is_token else super(BorderlessVectorTemplate, self)
         ).rules_text_and_pt_layers()
