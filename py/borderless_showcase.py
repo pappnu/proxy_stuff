@@ -266,7 +266,7 @@ class BorderlessShowcase(
         )
 
     @cached_property
-    def textbox_size(self) -> str:
+    def textbox_size(self) -> BorderlessTextbox:
         return self.config.get_option(
             section="FRAME",
             key="Textbox.Size",
@@ -1042,29 +1042,56 @@ class BorderlessShowcase(
     # region Shapes
 
     @cached_property
+    def pt_box_inner_shape(self) -> ArtLayer | None:
+        return getLayer(
+            f"{f'{LAYER_NAMES.BATTLE} ' if self.is_battle else ''}Inner",
+            [self.pt_group, LAYERS.SHAPE],
+        )
+
+    @cached_property
     def pt_box_shape(self) -> list[ArtLayer | None]:
         if not self.is_pt_enabled or self.has_displaced_pt_box:
             return [None]
 
-        if self.bottom_border_type == "Full":
-            pt_name = "Full"
-        elif self.bottom_border_type == "Fade":
-            pt_name = "Partial"
-        else:
-            pt_name = self.pt_box_and_bottom_pinline_type
-
-        # Battle does not support split defense box
-        if self.is_battle and pt_name == "Split":
-            pt_name = "Partial"
+        # Combine bottom pinline and pt shape according to user settings
+        if (
+            (
+                pt_shape := getLayer(
+                    f"{f'{LAYER_NAMES.BATTLE} ' if self.is_battle else ''}{
+                        'Hollow'
+                        if self.is_battle
+                        or self.pt_box_and_bottom_pinline_type != 'Split'
+                        else 'Split'
+                    }",
+                    [self.pt_group, LAYERS.SHAPE],
+                )
+            )
+            and self.pt_box_inner_shape
+            and self.bottom_pinline_shape_base
+        ):
+            inner_copy = self.pt_box_inner_shape.duplicate(
+                pt_shape, ElementPlacement.PlaceAfter
+            )
+            bottom_copy = self.bottom_pinline_shape_base.duplicate(
+                inner_copy, ElementPlacement.PlaceAfter
+            )
+            merged_shape = merge_shapes(
+                inner_copy, bottom_copy, operation=ShapeOperation.SubtractFront
+            )
+            pt_shape = merge_shapes(
+                pt_shape, merged_shape, operation=ShapeOperation.Unite
+            )
 
         return [
-            getLayer(
-                f"{f'{LAYER_NAMES.BATTLE} ' if self.is_battle else ''}{pt_name}",
-                [self.pt_group, LAYERS.SHAPE],
-            ),
+            pt_shape,
             getLayer(
                 (f"{LAYER_NAMES.BATTLE} " if self.is_battle else "")
-                + ("Fill" if pt_name in ("Full", "Partial") else "Fill Split"),
+                + (
+                    "Fill"
+                    # Battle does not support split defense box
+                    if self.is_battle or self.pt_box_and_bottom_pinline_type != "Split"
+                    else "Fill Split"
+                ),
                 self.pt_group,
             ),
         ]
@@ -1083,15 +1110,19 @@ class BorderlessShowcase(
         return None
 
     @cached_property
-    def bottom_pinline_shape(self) -> ArtLayer | None:
-        if self.is_pt_enabled and not self.has_displaced_pt_box:
-            return None
+    def bottom_pinline_shape_base(self) -> ArtLayer | None:
         return getLayer(
             "Partial"
             if self.pt_box_and_bottom_pinline_type != "Full"
             else self.pt_box_and_bottom_pinline_type,
             [self.pinlines_group, LAYERS.SHAPE, LAYERS.BOTTOM],
         )
+
+    @cached_property
+    def bottom_pinline_shape(self) -> ArtLayer | None:
+        if self.is_pt_enabled and not self.has_displaced_pt_box:
+            return None
+        return self.bottom_pinline_shape_base
 
     @cached_property
     def bottom_border_shape(self) -> ArtLayer | None:
@@ -1434,6 +1465,35 @@ class BorderlessShowcase(
                 )
 
                 override_text_style_ranges(self.text_layer_artist, ranges, font=font)
+
+    def shift_collector_info(self) -> None:
+        if not self.text_layer_set or not self.text_layer_set.visible:
+            return
+
+        if (
+            self.is_pt_enabled and not self.has_displaced_pt_box
+        ) or self.is_planeswalker:
+            # Adjust second collector info layer so that it doesn't overlap with
+            # PT and other such boxes.
+            ref_bounds: tuple[float, float, float, float] | None = None
+
+            if not self.is_planeswalker and self.pt_reference:
+                ref_bounds = self.pt_reference.bounds
+            elif self.loyalty_reference:
+                ref_bounds = self.loyalty_reference.bounds
+
+            if (
+                ref_bounds
+                and (text_bounds := self.text_layer_set.bounds)
+                and text_bounds[2] > ref_bounds[0]
+            ):
+                self.text_layer_set.translate(ref_bounds[0] - text_bounds[2], 0)
+        elif self.text_layer_artist:
+            # Precisely mirror end of set layer with start of artist layer
+            artist_bounds = self.text_layer_artist.bounds
+            expected_right = self.doc_width - artist_bounds[0]
+            if delta := expected_right - self.text_layer_set.bounds[2]:
+                self.text_layer_set.translate(delta, 0)
 
     def format_nickname_text(self) -> None:
         pass
@@ -2034,6 +2094,7 @@ class BorderlessShowcase(
             *methods,
             self.expansion_symbol_handler,
             self.pw_enable_loyalty_graphics,
+            self.shift_collector_info,
         ]
 
     # endregion Text
