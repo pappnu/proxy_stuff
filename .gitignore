@@ -4,3 +4,4 @@ config_ini/
 templates/
 _temp.*
 dist/
+/__init__.py
