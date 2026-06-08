@@ -29,24 +29,6 @@ def get_layer_dimensions_via_rasterization(
     return dims
 
 
-class LayerVisibleContext(AbstractContextManager[None]):
-    def __init__(self, layer: ArtLayer | LayerSet) -> None:
-        self._layer = layer
-        self._initial_visibility: bool
-
-    def __enter__(self) -> None:
-        self._initial_visibility = self._layer.visible
-        self._layer.visible = False
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        self._layer.visible = self._initial_visibility
-
-
 class TemporaryLayerCopy[T: (ArtLayer, LayerSet)](AbstractContextManager[T]):
     def __init__(self, layer: T) -> None:
         self._layer = layer

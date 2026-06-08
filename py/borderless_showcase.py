@@ -22,8 +22,15 @@ from src.helpers.bounds import (
 )
 from src.helpers.colors import get_pinline_gradient, get_rgb, rgb_black
 from src.helpers.effects import apply_fx
-from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
+from src.helpers.layers import (
+    get_reference_layer,
+    get_stroke_details,
+    getLayer,
+    getLayerSet,
+    select_layer,
+)
 from src.helpers.masks import apply_mask_to_layer_fx
+from src.helpers.shapes import create_shape_layer
 from src.helpers.text import (
     get_font_size,
     get_line_count,
@@ -58,9 +65,21 @@ from src.templates.saga import SagaMod
 from src.templates.split import SplitMod
 from src.templates.station import StationMod
 from src.templates.transform import TransformMod
-from src.text_layers import FormattedTextArea, FormattedTextField, TextField
+from src.text_layers import (
+    FormattedTextArea,
+    FormattedTextField,
+    ScaledTextField,
+    TextField,
+)
 from src.utils.adobe import LayerObjectTypes, ReferenceLayer
+from src.utils.data_structures import find_index
 from src.utils.fonts import is_font_available_in_ps
+from src.utils.uxp.path import PathPointConf
+from src.utils.uxp.shape import ShapeOperation, merge_shapes
+from src.utils.uxp.text import (
+    CreateTextLayerWithPathOptions,
+    create_text_layer_with_path,
+)
 
 from .backup import BackupAndRestore
 from .helpers import (
@@ -77,17 +96,13 @@ from .helpers import (
 )
 from .utils.colors import create_gradient_config_for_layer, create_gradient_location_map
 from .utils.layer import TemporaryLayerCopy, get_layer_dimensions_via_rasterization
-from .utils.layer_fx import get_stroke_details
-from .utils.path import check_layer_overlap_with_shape, create_shape_layer
+from .utils.path import check_layer_overlap_with_shape
 from .utils.text import (
     LANGUAGE_TO_FONT,
     align_dimension,
     find_cjk_sequences,
     guess_cjk_language,
 )
-from .uxp.path import PathPointConf
-from .uxp.shape import ShapeOperation, merge_shapes
-from .uxp.text import CreateTextLayerWithPathOptions, create_text_layer_with_path
 from .vertical_mod import VerticalMod
 
 _logger = getLogger(__name__)
@@ -644,11 +659,15 @@ class BorderlessShowcase(
             # Reserve space for flipide PT text
             if self.text_layer_flipside_pt:
                 # Format flipside PT text
-                for idx, txt in enumerate(reversed(self.text)):
-                    if txt.layer is self.text_layer_flipside_pt:
-                        self.text.pop(idx)
-                        if txt.validate():
-                            txt.execute()
+                if (
+                    idx := find_index(
+                        self.text,
+                        lambda item: item.layer is self.text_layer_flipside_pt,
+                    )
+                ) > -1:
+                    txt = self.text.pop(idx)
+                    if txt.validate():
+                        txt.execute()
 
                 # Create a shape that encompasses flipside PT text
                 flipside_ref_dims = get_layer_dimensions(layer)
@@ -1504,6 +1523,7 @@ class BorderlessShowcase(
         divider_layer: ArtLayer | LayerSet | None,
         oracle_text: str,
         flavor_text: str | None,
+        font: str,
     ) -> None:
         set_text_size_and_leading(
             layer, self.rules_text_font_size, self.rules_text_font_size
@@ -1513,6 +1533,7 @@ class BorderlessShowcase(
             contents=oracle_text,
             flavor=flavor_text,
             divider=divider_layer,
+            font=font,
         )
         if not text_field.validate():
             raise ValueError("Rules text layer is invalid.")
@@ -1570,16 +1591,18 @@ class BorderlessShowcase(
             if (stroke_details := get_stroke_details(base_text_layer))
             else 0
         )
+        base_ti = base_text_layer.textItem
+        base_font = base_ti.font
         # Text formatting might mess with the text's color value,
         # so the original has to be noted here
-        color = base_text_layer.textItem.color
+        color = base_ti.color
 
         if align_to is not None:
             top = min_top
         else:
             # Set and format rules text
             self.format_temp_rules_text(
-                base_text_layer, divider_layer, oracle_text, flavor_text
+                base_text_layer, divider_layer, oracle_text, flavor_text, font=base_font
             )
             dims_rules_text = get_layer_dimensions_via_rasterization(base_text_layer)
             top = min(dims_rules_text["top"], min_top)
@@ -1603,7 +1626,7 @@ class BorderlessShowcase(
             text_ref_shape, base_text_layer, color=color
         )
         self.format_temp_rules_text(
-            shaped_text, divider_layer, oracle_text, flavor_text
+            shaped_text, divider_layer, oracle_text, flavor_text, font=base_font
         )
 
         # Move text layer just above the point where text is allowed to be
@@ -1650,7 +1673,7 @@ class BorderlessShowcase(
             )
 
             self.format_temp_rules_text(
-                shaped_text, divider_layer, oracle_text, flavor_text
+                shaped_text, divider_layer, oracle_text, flavor_text, font=base_font
             )
 
         # Check for overflow after offsetting PT elements
@@ -1689,7 +1712,7 @@ class BorderlessShowcase(
                     color,
                 )
                 self.format_temp_rules_text(
-                    shaped_text, divider_layer, oracle_text, flavor_text
+                    shaped_text, divider_layer, oracle_text, flavor_text, font=base_font
                 )
 
                 dims_text_ref_shape = get_layer_dimensions_via_rasterization(
@@ -1742,7 +1765,11 @@ class BorderlessShowcase(
                         color,
                     )
                     self.format_temp_rules_text(
-                        shaped_text, divider_layer, oracle_text, flavor_text
+                        shaped_text,
+                        divider_layer,
+                        oracle_text,
+                        flavor_text,
+                        font=base_font,
                     )
 
                 # Further alignment is unnecessary, unless a specific alignment point has been given
@@ -1949,6 +1976,22 @@ class BorderlessShowcase(
         self.textbox_reference
         super(BorderlessVectorTemplate, self).rules_text_and_pt_layers()
 
+        if (
+            self.is_layout_saga
+            and (
+                idx := find_index(
+                    self.text,
+                    lambda entry: (
+                        isinstance(entry, FormattedTextArea)
+                        and entry.layer is self.text_layer_rules
+                    ),
+                )
+            )
+            > -1
+        ):
+            # Saga rules text is handled separately
+            self.text.pop(idx)
+
         if self.supports_dynamic_textbox_height:
             if self.rules_text_font_size:
                 # Filter out rules text formatting as it has been done already
@@ -1981,6 +2024,17 @@ class BorderlessShowcase(
                         # The text element already has a shape that offsets PT box and other extras.
                         entry.pt_reference = None
                         break
+
+        if self.size == BorderlessTextbox.Textless and self.is_pt_enabled:
+            for entry in self.text:
+                if (
+                    isinstance(entry, ScaledTextField)
+                    and entry.layer is self.text_layer_type
+                ):
+                    # Enable more accurate sizing for type text
+                    entry.gap = 0
+                    entry.step_sizes = (0.4, 0.1, 0.05)
+                    break
 
         if isinstance(self.layout, BattleLayout):
             for entry in self.text:
@@ -2070,6 +2124,18 @@ class BorderlessShowcase(
         if self.is_prototype:
             methods.append(self.text_layers_prototype)
         methods.insert(0, self.adjust_split_textboxes_to_font_size)
+        if (
+            self.is_front
+            and (
+                idx := find_index(
+                    methods, lambda item: item == self.text_layers_transform
+                )
+            )
+            > -1
+        ):
+            # Ensure that flipside PT formatting gets added to the list
+            # before textbox_reference is accessed.
+            methods.insert(0, methods.pop(idx))
         return methods
 
     @cached_property
@@ -2091,9 +2157,11 @@ class BorderlessShowcase(
             if self.textbox_positioning not in methods:
                 methods.append(self.textbox_positioning)
         return [
+            # PW layer positioning might execute shape operations which
+            # require the layers to be visible.
+            self.pw_enable_loyalty_graphics,
             *methods,
             self.expansion_symbol_handler,
-            self.pw_enable_loyalty_graphics,
             self.shift_collector_info,
         ]
 

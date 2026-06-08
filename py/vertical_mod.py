@@ -8,13 +8,20 @@ from src.enums.layers import LAYERS
 from src.enums.settings import BorderlessColorMode, BorderlessTextbox
 from src.helpers.colors import get_pinline_gradient, rgb_white
 from src.helpers.effects import disable_layer_fx
-from src.helpers.layers import get_reference_layer, getLayer, getLayerSet, select_layer
+from src.helpers.layers import (
+    get_reference_layer,
+    get_stroke_details,
+    getLayer,
+    getLayerSet,
+    select_layer,
+)
 from src.helpers.masks import (
     apply_mask,
     apply_mask_to_layer_fx,
     copy_layer_mask,
     enable_vector_mask,
 )
+from src.helpers.shapes import create_shape_layer
 from src.layouts import ClassLayout, SagaLayout
 from src.schema.colors import ColorObject, GradientConfig
 from src.templates.case import CaseMod
@@ -23,13 +30,12 @@ from src.templates.normal import BorderlessVectorTemplate
 from src.templates.saga import SagaMod
 from src.text_layers import FormattedTextArea, FormattedTextField, TextField
 from src.utils.adobe import ReferenceLayer
+from src.utils.uxp.shape import ShapeOperation, merge_shapes
+from src.utils.uxp.text import create_text_layer_with_path
 
 from .helpers import LAYER_NAMES, get_numeric_setting
-from .utils.layer_fx import get_stroke_details
 from .utils.mask import create_mask_from
-from .utils.path import create_shape_layer, get_shape_dimensions
-from .uxp.shape import ShapeOperation, merge_shapes
-from .uxp.text import create_text_layer_with_path
+from .utils.path import get_shape_dimensions
 
 
 class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
