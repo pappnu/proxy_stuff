@@ -8,19 +8,18 @@ from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api._selection import Selection
-from photoshop.api.enumerations import BlendMode, ElementPlacement, SelectionType
+from photoshop.api.enumerations import ElementPlacement, SelectionType
 
 from src.cards import strip_reminder_text
 from src.enums.layers import LAYERS
 from src.enums.mtg import Rarity
 from src.enums.settings import BorderlessTextbox
-from src.helpers.adjustments import create_color_layer
 from src.helpers.bounds import (
     LayerDimensions,
     get_group_dimensions,
     get_layer_dimensions,
 )
-from src.helpers.colors import get_pinline_gradient, get_rgb, rgb_black
+from src.helpers.colors import get_pinline_gradient, get_rgb
 from src.helpers.effects import apply_fx
 from src.helpers.layers import (
     get_reference_layer,
@@ -94,6 +93,7 @@ from .helpers import (
     is_color_identity,
     parse_hex_color_list,
 )
+from .modifiers.hide_transparency import HideTransparencyMod
 from .utils.colors import create_gradient_config_for_layer, create_gradient_location_map
 from .utils.layer import TemporaryLayerCopy, get_layer_dimensions_via_rasterization
 from .utils.path import check_layer_overlap_with_shape
@@ -127,6 +127,7 @@ class BorderlessShowcase(
     AdventureMod,
     LevelerMod,
     StationMod,
+    HideTransparencyMod,
     BackupAndRestore,
 ):
     # region Constants
@@ -376,6 +377,10 @@ class BorderlessShowcase(
             return False
         return super().is_centered
 
+    @cached_property
+    def should_hide_transparencies(self) -> bool:
+        return self.bottom_border_type == "Full"
+
     # endregion Checks
 
     # region Frame Details
@@ -449,7 +454,9 @@ class BorderlessShowcase(
 
     @cached_property
     def ability_text_spacing(self) -> float | int:
-        return self.rules_text_padding
+        return get_numeric_setting(
+            self.config, "TEXT", "Rules.Text.Padding.Planeswalker", 32
+        )
 
     @cached_property
     def ability_text_scaling_step_sizes(self) -> Sequence[float] | None:
@@ -2173,7 +2180,6 @@ class BorderlessShowcase(
     def hooks(self) -> list[Callable[[], None]]:
         hooks = super().hooks
         hooks.append(self.hide_layer_effects_with_pinlines_mask)
-        hooks.append(self.hide_transparencies)
         # Collapse all groups in order to make it easier to access
         # the layers usually involved in pop-outs
         hooks.append(collapse_all_groups)
@@ -2184,16 +2190,6 @@ class BorderlessShowcase(
             # Set layer effects to be hidden by pinlines mask
             # in order to ease creating pop-out effects.
             apply_mask_to_layer_fx(self.pinlines_group)
-
-    def hide_transparencies(self) -> None:
-        if self.bottom_border_type == "Full" and self.art_layer:
-            # Create a black layer behind everything else in order
-            # to ensure that there's no transparency in the final image.
-            layer = self.docref.artLayers.add()
-            layer.move(self.art_layer, ElementPlacement.PlaceAfter)
-            create_color_layer(
-                rgb_black(), layer, self.docref, blend_mode=BlendMode.NormalBlend
-            )
 
     # endregion Hooks
 

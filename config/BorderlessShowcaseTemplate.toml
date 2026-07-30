@@ -91,6 +91,12 @@ desc = "The amount of extra vertical padding in pixels to add to rules text. App
 type = "float"
 default = 64.0
 
+[TEXT."Rules.Text.Padding.Planeswalker"]
+title = "Planeswalker rules text vertical padding"
+desc = "The amount of extra vertical padding in pixels to add to Planeswalker rules text."
+type = "float"
+default = 32.0
+
 [TEXT.Nickname]
 title = "Use Nickname"
 desc = """When enabled, card will be rendered with both a 'real' name and a 'nickname' you can enter manually."""
