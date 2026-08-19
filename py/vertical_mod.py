@@ -105,11 +105,16 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         if (
             isinstance(self.layout, SagaLayout)
             and self.is_vertical_creature
+            and self.layout.ability_text
             and not self.textbox_height
         ):
-            self.layout.saga_description = (
-                f"{self.layout.ability_text}\n{self.layout.saga_description}"
-            )
+            # Bundle Creature ability text with the Saga reminder text
+            # if bottom textbox is diabled
+            self.layout.saga_description = f"{self.layout.ability_text}{
+                f'\n{self.layout.saga_description}'
+                if self.layout.saga_description
+                else ''
+            }"
 
     def load_expansion_symbol(self) -> None:
         # There's no tailored slot in the execution chain to insert the shape creation
@@ -381,7 +386,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
                 ),
                 self.vertical_group,
             ) or get_reference_layer(
-                f"{LAYERS.TEXTBOX_REFERENCE}{f' {LAYERS.TRANSFORM_FRONT}' if self.is_front and self.is_flipside_creature else ''}",
+                f"{LAYERS.TEXTBOX_REFERENCE}{
+                    f' {LAYERS.TRANSFORM_FRONT}'
+                    if self.is_front and self.is_flipside_creature
+                    else ''
+                }",
                 self.vertical_group,
             )
 
@@ -431,10 +440,11 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
 
     @cached_property
     def divider_layer(self) -> ArtLayer | LayerSet | None:
-        if (
-            self.has_extra_textbox
-            and isinstance(self.layout, SagaLayout)
-            and not (self.layout.ability_text and self.layout.flavor_text)
+        if isinstance(self.layout, SagaLayout) and (
+            not (
+                self.has_extra_textbox
+                or (self.layout.ability_text and self.layout.flavor_text)
+            )
         ):
             return None
         return super().divider_layer
