@@ -80,12 +80,11 @@ from src.utils.uxp.text import (
     create_text_layer_with_path,
 )
 
-from .backup import BackupAndRestore
+from .backup import BackupAndRestore, is_adjustment_layer
 from .helpers import (
     LAYER_NAMES,
     ExpansionSymbolOverrideMode,
     FlipDirection,
-    collapse_all_groups,
     copy_color,
     create_clipping_mask,
     flip_layer,
@@ -93,6 +92,7 @@ from .helpers import (
     is_color_identity,
     parse_hex_color_list,
 )
+from .modifiers.collapse_all_groups import CollapseAllGroupsMod
 from .modifiers.hide_transparency import HideTransparencyMod
 from .utils.colors import create_gradient_config_for_layer, create_gradient_location_map
 from .utils.layer import TemporaryLayerCopy, get_layer_dimensions_via_rasterization
@@ -129,6 +129,7 @@ class BorderlessShowcase(
     StationMod,
     HideTransparencyMod,
     BackupAndRestore,
+    CollapseAllGroupsMod,
 ):
     # region Constants
 
@@ -524,10 +525,21 @@ class BorderlessShowcase(
 
     # region Backup
 
+    @cached_property
+    def initial_layer_names(self) -> list[str]:
+        if self.docref:
+            return [layer.name for layer in self.docref.layers]
+        return []
+
     @property
     def layers_to_seek_masks_from(self) -> Iterable[ArtLayer | LayerSet | None]:
         if self.docref:
-            return (*self.docref.layerSets, *self.docref.artLayers)
+            return [
+                layer
+                for layer in self.docref.layers
+                if (isinstance(layer, LayerSet) or not is_adjustment_layer(layer))
+                and layer.name in self.initial_layer_names
+            ]
         return []
 
     @property
@@ -1299,6 +1311,11 @@ class BorderlessShowcase(
             methods.append(self.frame_layers_leveler)
         if self.is_prototype:
             methods.append(self.frame_layers_prototype)
+
+        def cache_initial_layer_names() -> None:
+            self.initial_layer_names
+
+        methods.append(cache_initial_layer_names)
         return methods
 
     # endregion Frame
@@ -1466,7 +1483,16 @@ class BorderlessShowcase(
     def collector_info(self) -> None:
         super().collector_info()
 
-        if self.text_layer_artist:
+        artist_layer = (
+            self.text_layer_artist
+            if self.text_layer_artist and self.text_layer_artist.visible
+            else self.text_layer_collector_second
+            if self.text_layer_collector_second
+            and self.text_layer_collector_second.visible
+            else None
+        )
+
+        if artist_layer:
             try:
                 # Assume that only the first artist name form is non-Latin
                 idx = self.layout.artist.index(" / ")
@@ -1481,16 +1507,14 @@ class BorderlessShowcase(
                 and (ranges := find_cjk_sequences(to_style))
             ):
                 # Offset pen icon or anything else that might precede the artist name
-                if offset := self.text_layer_artist.textItem.contents.index(
-                    self.layout.artist
-                ):
+                if offset := artist_layer.textItem.contents.index(self.layout.artist):
                     ranges = [(start + offset, end + offset) for start, end in ranges]
 
                 _logger.debug(
                     f"Setting font '{font}' to artist text item's character ranges: {ranges}"
                 )
 
-                override_text_style_ranges(self.text_layer_artist, ranges, font=font)
+                override_text_style_ranges(artist_layer, ranges, font=font)
 
     def shift_collector_info(self) -> None:
         if not self.text_layer_set or not self.text_layer_set.visible:
@@ -2180,9 +2204,6 @@ class BorderlessShowcase(
     def hooks(self) -> list[Callable[[], None]]:
         hooks = super().hooks
         hooks.append(self.hide_layer_effects_with_pinlines_mask)
-        # Collapse all groups in order to make it easier to access
-        # the layers usually involved in pop-outs
-        hooks.append(collapse_all_groups)
         return hooks
 
     def hide_layer_effects_with_pinlines_mask(self) -> None:

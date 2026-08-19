@@ -7,21 +7,52 @@ from pathlib import Path
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
 from photoshop.api._layerSet import LayerSet
-from photoshop.api.enumerations import ElementPlacement, SaveOptions
+from photoshop.api.enumerations import ElementPlacement, LayerKind, SaveOptions
+from pydantic import BaseModel, ValidationError
 
 from src._state import PATH
 from src.gui.qml.models.file_dialog_model import FileMode
 from src.helpers.document import save_document_psd
-from src.helpers.layers import getLayer
+from src.helpers.layers import duplicate_layer, getLayer
 from src.helpers.masks import apply_mask_to_layer_fx, copy_layer_mask
 from src.templates._core import BaseTemplate
 from src.utils.adobe import ReferenceLayer
 from src.utils.asynchronic import async_to_sync
+from src.utils.data_structures import find_item
 
 from .helpers import copy_layer, has_layer_mask
 from .restore import find_file_in_directory
 
 _logger = getLogger(__name__)
+
+
+class ExtraLayerConfig(BaseModel):
+    name: str
+    after_layer: str | None
+    is_clipping: bool
+
+
+_adjustment_layer_kinds = (
+    LayerKind.BlackAndWhiteLayer,
+    LayerKind.BrightnessContrastLayer,
+    LayerKind.ChannelMixerLayer,
+    LayerKind.ColorBalanceLayer,
+    LayerKind.ColorLookup,
+    LayerKind.CurvesLayer,
+    LayerKind.ExposureLayer,
+    LayerKind.HueSaturationLayer,
+    LayerKind.InversionLayer,
+    LayerKind.LevelsLayer,
+    LayerKind.PhotoFilterLayer,
+    LayerKind.PosterizeLayer,
+    LayerKind.SelectiveColorLayer,
+    LayerKind.ThresholdLayer,
+    LayerKind.Vibrance,
+)
+
+
+def is_adjustment_layer(layer: ArtLayer):
+    return layer.kind in _adjustment_layer_kinds
 
 
 class BackupAndRestore(BaseTemplate):
@@ -49,6 +80,12 @@ class BackupAndRestore(BaseTemplate):
     def prompt_for_art_backup(self) -> bool:
         return self.config.get_bool_setting(
             section="BACKUP", key="Art.Prompt", default=True
+        )
+
+    @cached_property
+    def backup_adjustment_layers(self) -> bool:
+        return self.config.get_bool_setting(
+            section="BACKUP", key="Backup.Adjustment.Layers", default=True
         )
 
     # endregion Settings
@@ -111,7 +148,8 @@ class BackupAndRestore(BaseTemplate):
                 backed_up_something = False
 
                 art_layer = self.art_layer
-                for layer in self.layers_to_copy:
+                layers_to_copy = self.layers_to_copy
+                for layer in layers_to_copy:
                     if layer:
                         if (
                             art_layer
@@ -130,19 +168,42 @@ class BackupAndRestore(BaseTemplate):
                         copy_layer(layer, relative_layer=default_backup_doc_layer)
                         backed_up_something = True
 
-                for layer in self.layers_to_seek_masks_from:
+                layers_to_seek_masks_from = self.layers_to_seek_masks_from
+                for layer in layers_to_seek_masks_from:
                     self.app.activeDocument = template_doc
                     if layer and has_layer_mask(layer):
                         temp_layer = template_doc.artLayers.add()
                         temp_layer.name = layer.name
                         copy_layer_mask(layer, temp_layer)
-                        _bak_layer = copy_layer(
-                            temp_layer, relative_layer=default_backup_doc_layer
-                        )
+                        copy_layer(temp_layer, relative_layer=default_backup_doc_layer)
                         temp_layer.remove()
-                        # self.app.activeDocument = backup_doc
-                        # bak_layer.name = layer.name
                         backed_up_something = True
+
+                if self.backup_adjustment_layers:
+                    prev: ArtLayer | LayerSet | None = None
+                    for lyr in self.docref.layers:
+                        if (
+                            not isinstance(lyr, LayerSet)
+                            and is_adjustment_layer(lyr)
+                            and not find_item(
+                                layers_to_copy,
+                                lambda item: bool(item) and item.name == lyr.name,
+                            )
+                            and not find_item(
+                                layers_to_seek_masks_from,
+                                lambda item: bool(item) and item.name == lyr.name,
+                            )
+                        ):
+                            conf = ExtraLayerConfig(
+                                name=lyr.name,
+                                after_layer=prev.name if prev else None,
+                                is_clipping=lyr.grouped,
+                            )
+                            duplicate_layer(
+                                lyr, name=conf.model_dump_json(), relative_to=backup_doc
+                            )
+                            backed_up_something = True
+                        prev = lyr
 
                 if backed_up_something:
                     self.app.activeDocument = backup_doc
@@ -237,6 +298,27 @@ class BackupAndRestore(BaseTemplate):
                             _logger.warning(
                                 f"Couldn't apply backup mask to layer fx for: {layer.name}"
                             )
+
+            template_doc_layers = [*template_doc.layers]
+            for layer in backup_doc.artLayers:
+                try:
+                    conf = ExtraLayerConfig.model_validate_json(layer.name)
+                    duplicate = duplicate_layer(
+                        layer,
+                        name=conf.name,
+                        relative_to=find_item(
+                            template_doc_layers,
+                            lambda item: item.name == conf.after_layer,
+                        )
+                        if conf.after_layer
+                        else None,
+                        element_placement=ElementPlacement.PlaceAfter,
+                    )
+                    if conf.is_clipping:
+                        self.app.activeDocument = template_doc
+                        duplicate.grouped = True
+                except ValidationError:
+                    pass
 
             backup_doc.close()
             self.app.activeDocument = template_doc

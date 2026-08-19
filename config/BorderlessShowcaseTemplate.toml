@@ -159,6 +159,12 @@ desc = "When enabled, asks if the art layer should be copied to the backup."
 type = "bool"
 default = 0
 
+[BACKUP."Backup.Adjustment.Layers"]
+title = "Backup adjustment layers"
+desc = "Add top level adjustment layers, if any, to the backup, such as Levels, Curves, etc."
+type = "bool"
+default = 1
+
 [OTHER]
 title = "Other Options"
 

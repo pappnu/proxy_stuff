@@ -5,13 +5,9 @@ from contextlib import suppress
 from enum import Enum, StrEnum
 from functools import cached_property
 from logging import Logger
-from typing import Literal
+from typing import Literal, overload
 
-from photoshop.api import (
-    ActionDescriptor,
-    ActionReference,
-    SolidColor,
-)
+from photoshop.api import ActionDescriptor, ActionReference, SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._document import Document
 from photoshop.api._layerSet import LayerSet
@@ -171,6 +167,33 @@ def create_art_layer(
     if relative_layer:
         new_layer.move(relative_layer, insertion_location)
     return new_layer
+
+
+@overload
+def copy_layer(
+    layer_to_copy: ArtLayer,
+    name: str | None = None,
+    relative_layer: ArtLayer | LayerSet | None = None,
+    insertion_location: ElementPlacement = ElementPlacement.PlaceBefore,
+) -> ArtLayer: ...
+
+
+@overload
+def copy_layer(
+    layer_to_copy: LayerSet,
+    name: str | None = None,
+    relative_layer: ArtLayer | LayerSet | None = None,
+    insertion_location: ElementPlacement = ElementPlacement.PlaceBefore,
+) -> LayerSet: ...
+
+
+@overload
+def copy_layer(
+    layer_to_copy: ArtLayer | LayerSet,
+    name: str | None = None,
+    relative_layer: ArtLayer | LayerSet | None = None,
+    insertion_location: ElementPlacement = ElementPlacement.PlaceBefore,
+) -> ArtLayer | LayerSet: ...
 
 
 def copy_layer(
