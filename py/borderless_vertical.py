@@ -6,6 +6,7 @@ from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
 from photoshop.api.enumerations import ElementPlacement
 
+from plugins.proxy_stuff.py.modifiers.collapse_all_groups import CollapseAllGroupsMod
 from src.enums.layers import LAYERS
 from src.helpers.colors import get_rgb
 from src.helpers.effects import enable_layer_fx
@@ -21,6 +22,7 @@ from src.templates._vector import MaskAction
 from src.templates.normal import BorderlessVectorTemplate
 
 from .helpers import LAYER_NAMES, create_clipping_mask, find_art_layer
+from .modifiers.collector_info import ExtraCollectorInfoMod
 from .vertical_mod import VerticalMod
 
 
@@ -30,7 +32,7 @@ class TypelineColorOptions(StrEnum):
     NO = "No"
 
 
-class BorderlessVertical(VerticalMod):
+class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMod):
     # region Settings
 
     @cached_property

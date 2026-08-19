@@ -53,6 +53,12 @@ desc = """When enabled, the Saga/Class reminder text is displayed."""
 type = "bool"
 default = 1
 
+[TEXT."Collector.Line.Extra"]
+title = "Extra Collector Info Line Format"
+desc = "Fills the extra collector info line with given text. Supports the same variable substitutions as the first line."
+type = "string"
+default = ""
+
 [COLORS]
 title = "Color Options"
 
