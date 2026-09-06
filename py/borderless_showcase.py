@@ -2,7 +2,7 @@ from collections.abc import Callable, Iterable, Sequence
 from functools import cached_property
 from logging import getLogger
 from math import ceil
-from typing import Literal, NotRequired, TypedDict, override
+from typing import ClassVar, Literal, NotRequired, TypedDict, override
 
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
@@ -614,13 +614,13 @@ class BorderlessShowcase(
     def border_group(self) -> LayerSet:
         if layer := getLayerSet(LAYERS.BORDER):
             return layer
-        raise Exception("Couldn't get border group.")
+        raise ValueError("Couldn't get border group.")
 
     @cached_property
     def text_group(self) -> LayerSet:
         if layer := getLayerSet(LAYERS.TEXT_AND_ICONS):
             return layer
-        raise Exception("Couldn't get text group.")
+        raise ValueError("Couldn't get text group.")
 
     @cached_property
     def rules_text_group(self) -> LayerSet | None:
@@ -1313,7 +1313,7 @@ class BorderlessShowcase(
             methods.append(self.frame_layers_prototype)
 
         def cache_initial_layer_names() -> None:
-            self.initial_layer_names
+            _ = self.initial_layer_names
 
         methods.append(cache_initial_layer_names)
         return methods
@@ -1409,7 +1409,7 @@ class BorderlessShowcase(
         if self.expansion_symbol_layer:
             if self.size == LAYERS.TEXTLESS and self.is_pt_enabled:
                 self.expansion_symbol_layer.visible = False
-                return None
+                return
 
             effects: list[LayerEffects] = [EffectStroke(weight=7, style="out")]
 
@@ -1602,8 +1602,8 @@ class BorderlessShowcase(
         divider_layer: ArtLayer | LayerSet | None,
         oracle_text: str,
         flavor_text: str | None,
-        min_top: float | int | None = None,
-        align_to: float | int | None = None,
+        min_top: float | None = None,
+        align_to: float | None = None,
         alignment_dimension: Literal[
             "top", "bottom", "left", "right", "center_y", "center_x"
         ]
@@ -1709,8 +1709,10 @@ class BorderlessShowcase(
 
         # Check for overflow after offsetting PT elements
         # and reserve more space for text if necessary.
-        if self.requires_text_shaping and self.textbox_overflow_reference:
-            if (
+        if (
+            self.requires_text_shaping
+            and self.textbox_overflow_reference
+            and (
                 (
                     dims_shaped_text := get_layer_dimensions_via_rasterization(
                         shaped_text
@@ -1728,8 +1730,60 @@ class BorderlessShowcase(
                 #     )
                 # )
                 < 0
+            )
+        ):
+            top = dims_shaped_text["top"] + delta - vertical_padding[1]
+
+            shaped_text.remove()
+            shaped_text = self.create_offset_text_shape(
+                (
+                    {"x": dims_wrap_ref["left"], "y": top + stroke_size},
+                    {"x": dims_wrap_ref["right"], "y": top + stroke_size},
+                    {"x": dims_wrap_ref["right"], "y": bottom},
+                    {"x": dims_wrap_ref["left"], "y": bottom},
+                ),
+                base_text_layer,
+                color,
+            )
+            self.format_temp_rules_text(
+                shaped_text, divider_layer, oracle_text, flavor_text, font=base_font
+            )
+
+            dims_text_ref_shape = get_layer_dimensions_via_rasterization(shaped_text)
+            align_bottom = ceil(
+                min(
+                    self.textbox_overflow_reference.dims["top"],
+                    dims_textbox_ref["bottom"],
+                )
+                - vertical_padding[1]
+            )
+
+            mock_dims: LayerDimensions = {
+                **dims_textbox_ref,
+                "bottom": align_bottom,
+            }
+            # Align text vertically
+            align_dimension(
+                shaped_text,
+                reference_dimensions=mock_dims,
+                alignment_dimension="bottom",
+            )
+
+            # Text might overlap with the PT box after alignment
+            if (
+                self.pt_reference
+                and (
+                    delta := check_layer_overlap_with_shape(
+                        shaped_text, self.pt_reference
+                    )
+                )
+                < 0
             ):
-                top = dims_shaped_text["top"] + delta - vertical_padding[1]
+                dims_text_ref_shape = get_layer_dimensions_via_rasterization(
+                    shaped_text
+                )
+
+                top = dims_text_ref_shape["top"] + delta - vertical_padding[1]
 
                 shaped_text.remove()
                 shaped_text = self.create_offset_text_shape(
@@ -1743,76 +1797,19 @@ class BorderlessShowcase(
                     color,
                 )
                 self.format_temp_rules_text(
-                    shaped_text, divider_layer, oracle_text, flavor_text, font=base_font
-                )
-
-                dims_text_ref_shape = get_layer_dimensions_via_rasterization(
-                    shaped_text
-                )
-                align_bottom = ceil(
-                    min(
-                        self.textbox_overflow_reference.dims["top"],
-                        dims_textbox_ref["bottom"],
-                    )
-                    - vertical_padding[1]
-                )
-
-                mock_dims: LayerDimensions = {
-                    **dims_textbox_ref,
-                    "bottom": align_bottom,
-                }
-                # Align text vertically
-                align_dimension(
                     shaped_text,
-                    reference_dimensions=mock_dims,
-                    alignment_dimension="bottom",
+                    divider_layer,
+                    oracle_text,
+                    flavor_text,
+                    font=base_font,
                 )
 
-                # Text might overlap with the PT box after alignment
-                if (
-                    self.pt_reference
-                    and (
-                        delta := check_layer_overlap_with_shape(
-                            shaped_text, self.pt_reference
-                        )
-                    )
-                    < 0
-                ):
-                    dims_text_ref_shape = get_layer_dimensions_via_rasterization(
-                        shaped_text
-                    )
-
-                    top = dims_text_ref_shape["top"] + delta - vertical_padding[1]
-
-                    shaped_text.remove()
-                    shaped_text = self.create_offset_text_shape(
-                        (
-                            {"x": dims_wrap_ref["left"], "y": top + stroke_size},
-                            {"x": dims_wrap_ref["right"], "y": top + stroke_size},
-                            {"x": dims_wrap_ref["right"], "y": bottom},
-                            {"x": dims_wrap_ref["left"], "y": bottom},
-                        ),
-                        base_text_layer,
-                        color,
-                    )
-                    self.format_temp_rules_text(
-                        shaped_text,
-                        divider_layer,
-                        oracle_text,
-                        flavor_text,
-                        font=base_font,
-                    )
-
-                # Further alignment is unnecessary, unless a specific alignment point has been given
-                alignment_dimension = None
+            # Further alignment is unnecessary, unless a specific alignment point has been given
+            alignment_dimension = None
 
         dims_text_ref_shape = get_layer_dimensions_via_rasterization(shaped_text)
         # Take padding into account when centering text
-        chosen_top = (
-            dims_text_ref_shape["top"]
-            if dims_text_ref_shape["top"] < min_top
-            else min_top
-        )
+        chosen_top = min(min_top, dims_text_ref_shape["top"])
         align_y = ceil(
             align_to
             if align_to is not None
@@ -1880,7 +1877,7 @@ class BorderlessShowcase(
         )
 
     def adjust_textboxes_for_font_size(
-        self, font_size: int | float, textbox_args: list[TextboxSizingArgs]
+        self, font_size: float, textbox_args: list[TextboxSizingArgs]
     ) -> list[tuple[ArtLayer, ReferenceLayer]]:
         """
         Adjusts multiple textboxes, whose bottom edges are aligned horizontally,
@@ -2004,7 +2001,7 @@ class BorderlessShowcase(
 
         # Ensure that sizing logic associated with fixed font size runs before
         # accessing the rules text layer
-        self.textbox_reference
+        _ = self.textbox_reference
         super(BorderlessVectorTemplate, self).rules_text_and_pt_layers()
 
         if (
@@ -2454,7 +2451,7 @@ class BorderlessShowcase(
             if self.text_layer_fuse:
                 self.text_layer_fuse.visible = True
         if self.flip_twins:
-            self.name_pinlines_layers
+            _ = self.name_pinlines_layers
         for layer in self.typeline_pinlines_layers:
             if layer:
                 layer.visible = True
@@ -2656,7 +2653,7 @@ class BorderlessShowcase(
 
     # region Prototype
 
-    _prototype_manabox_colors: dict[str, ColorObject] = {
+    _prototype_manabox_colors: ClassVar[dict[str, ColorObject]] = {
         "W": "#afa591",
         "U": "#0c7798",
         "B": "#585757",
@@ -2764,21 +2761,24 @@ class BorderlessShowcase(
                 )
 
     def post_text_layers_prototype(self) -> None:
-        if isinstance(self.layout, PrototypeLayout):
-            if self.text_layer_rules_prototype and self.text_layer_rules:
-                self.text_layer_rules_prototype.textItem.size = (
-                    self.text_layer_rules.textItem.size
-                )
-                text_area = FormattedTextArea(
-                    layer=self.text_layer_rules_prototype,
-                    contents="Prototype"
-                    if self.config.remove_reminder
-                    else self.text_layer_rules_prototype.textItem.contents,
-                    reference=self.rules_text_reference_prototype,
-                )
-                self.disable_text_area_scaling(text_area)
-                if text_area.validate():
-                    text_area.execute()
+        if (
+            isinstance(self.layout, PrototypeLayout)
+            and self.text_layer_rules_prototype
+            and self.text_layer_rules
+        ):
+            self.text_layer_rules_prototype.textItem.size = (
+                self.text_layer_rules.textItem.size
+            )
+            text_area = FormattedTextArea(
+                layer=self.text_layer_rules_prototype,
+                contents="Prototype"
+                if self.config.remove_reminder
+                else self.text_layer_rules_prototype.textItem.contents,
+                reference=self.rules_text_reference_prototype,
+            )
+            self.disable_text_area_scaling(text_area)
+            if text_area.validate():
+                text_area.execute()
 
         # Move Prototype elements on top of normal rules text
         if self.textbox_reference and self.prototype_group and self.prototype_pt_group:
