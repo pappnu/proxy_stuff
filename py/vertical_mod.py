@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from functools import cached_property
 
 from photoshop.api._artlayer import ArtLayer
@@ -588,7 +589,48 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     # region Colors
 
     @cached_property
-    def pt_inner_colors(self) -> ColorObject | list[ColorObject] | list[GradientConfig]:
+    def pt_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
+        # Default to twins, or Vehicle for non-colored vehicle artifacts
+        colors = self.twins
+
+        # Color enabled hybrid OR color enabled multicolor
+        if (self.is_hybrid and self.hybrid_colored) or (
+            self.is_multicolor and self.multicolor_pt
+        ):
+            colors = self.identity[-1]
+        # Use Hybrid color for color-disabled hybrid cards
+        elif self.is_hybrid:
+            colors = LAYERS.HYBRID
+
+        # Use artifact twins color if artifact mode isn't colored
+        if (
+            self.is_artifact
+            and not self.is_land
+            and self.artifact_color_mode
+            not in [
+                BorderlessColorMode.Twins_And_PT,
+                BorderlessColorMode.All,
+                BorderlessColorMode.PT,
+            ]
+        ):
+            colors = LAYERS.ARTIFACT
+
+        # Use Vehicle for non-colored artifacts
+        if colors == LAYERS.ARTIFACT and self.is_vehicle:
+            colors = LAYERS.VEHICLE
+
+        # Return Solid Color or Gradient notation
+        return get_pinline_gradient(
+            colors=colors,
+            color_map=self.pinlines_color_map,
+        )
+
+    @cached_property
+    def pt_inner_colors(
+        self,
+    ) -> ColorObject | Sequence[ColorObject] | Sequence[GradientConfig]:
         """
         Colors for inner part of PT box.
         Follows the rules of pt_colors, but uses a different color_map.
