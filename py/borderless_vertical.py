@@ -59,7 +59,7 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
     @cached_property
     def textbox_glow(self) -> bool:
         return self.config.get_bool_setting(
-            section="COLORS", key="Color.Textbox.Glow", default=True
+            section="COLORS", key="Color.Textbox.Glow", default=False
         )
 
     @cached_property
