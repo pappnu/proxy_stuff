@@ -25,6 +25,7 @@ from src.utils.uxp.shape import ShapeOperation, merge_shapes
 from .helpers import LAYER_NAMES, create_clipping_mask, find_art_layer
 from .modifiers.collapse_all_groups import CollapseAllGroupsMod
 from .modifiers.collector_info import ExtraCollectorInfoMod
+from .utils.layer import is_generated_fill_layer
 from .vertical_mod import VerticalMod
 
 
@@ -110,8 +111,10 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
     def crown_shape(self) -> ArtLayer | None:
         if not self.is_legendary:
             return None
-        if (layer := getLayer(LAYERS.NORMAL, [self.crown_group, LAYERS.SHAPE])) and (
-            self.nickname_pinlines_shape
+        if (
+            (layer := getLayer(LAYERS.NORMAL, [self.crown_group, LAYERS.SHAPE]))
+            and self.is_nickname
+            and (self.nickname_pinlines_shape)
         ):
             cutout = self.nickname_pinlines_shape.duplicate(
                 layer, ElementPlacement.PlaceBefore
@@ -284,7 +287,7 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
         if self.is_creature and self.pt_group:
             # Remove unwanted group wide color fill
             for layer in self.pt_group.artLayers:
-                if " Fill " in layer.name:
+                if is_generated_fill_layer(layer):
                     layer.visible = False
                     break
 
@@ -299,11 +302,7 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
         # Fix twins coloring
         if (
             self.twins_group
-            and (
-                layer := find_art_layer(
-                    self.twins_group, lambda layer: " Fill " in layer.name
-                )
-            )
+            and (layer := find_art_layer(self.twins_group, is_generated_fill_layer))
             and (
                 ref := getLayerSet(
                     LAYER_NAMES.CARD_NAME, [self.twins_group, LAYERS.SHAPE]
@@ -331,7 +330,7 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
             and (
                 color_layer := find_art_layer(
                     self.textbox_group,
-                    lambda layer: " Fill " in layer.name,
+                    is_generated_fill_layer,
                 )
             )
         ):
@@ -355,7 +354,7 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
             and (
                 layer := find_art_layer(
                     self.textbox_group,
-                    lambda layer: " Fill " in layer.name,
+                    is_generated_fill_layer,
                 )
             )
         ):
