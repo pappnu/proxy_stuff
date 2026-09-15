@@ -4,12 +4,12 @@ from functools import cached_property
 from photoshop.api import SolidColor
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
-from photoshop.api.enumerations import ElementPlacement
+from photoshop.api.enumerations import AnchorPosition, ElementPlacement
 
 from src.enums.layers import LAYERS
 from src.helpers.colors import get_rgb
-from src.helpers.effects import enable_layer_fx
-from src.helpers.layers import getLayer, getLayerSet
+from src.helpers.effects import clear_layer_fx, enable_layer_fx
+from src.helpers.layers import get_reference_layer, getLayer, getLayerSet
 from src.helpers.masks import (
     MaskSelectionBehaviour,
     apply_mask_to_layer_fx,
@@ -19,6 +19,8 @@ from src.helpers.masks import (
 from src.helpers.selection import select_layer_pixels
 from src.templates._vector import MaskAction
 from src.templates.normal import BorderlessVectorTemplate
+from src.utils.adobe import ReferenceLayer
+from src.utils.uxp.shape import ShapeOperation, merge_shapes
 
 from .helpers import LAYER_NAMES, create_clipping_mask, find_art_layer
 from .modifiers.collapse_all_groups import CollapseAllGroupsMod
@@ -94,9 +96,33 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
             return getLayerSet(LAYERS.PT_BOX)
         return super().pt_group
 
+    @cached_property
+    def nickname_pinlines_group(self) -> LayerSet | None:
+        if self.is_legendary:
+            return getLayerSet(LAYERS.NICKNAME, (self.crown_group, LAYERS.SHAPE))
+        return super().nickname_pinlines_group
+
     # endregion Groups
 
     # region Shapes
+
+    @cached_property
+    def crown_shape(self) -> ArtLayer | None:
+        if not self.is_legendary:
+            return None
+        if (layer := getLayer(LAYERS.NORMAL, [self.crown_group, LAYERS.SHAPE])) and (
+            self.nickname_pinlines_shape
+        ):
+            cutout = self.nickname_pinlines_shape.duplicate(
+                layer, ElementPlacement.PlaceBefore
+            )
+            cutout.fillOpacity = 100
+            clear_layer_fx(cutout)
+            cutout.resize(99, 99, AnchorPosition.TopCenter)
+            name = layer.name
+            layer = merge_shapes(cutout, layer, operation=ShapeOperation.SubtractFront)
+            layer.name = name
+        return layer
 
     @cached_property
     def twins_shapes(self) -> list[ArtLayer | LayerSet | None]:
@@ -160,8 +186,22 @@ class BorderlessVertical(VerticalMod, ExtraCollectorInfoMod, CollapseAllGroupsMo
             )
 
     @cached_property
+    def nickname_shape(self) -> ReferenceLayer | None:
+        return get_reference_layer(
+            LAYERS.NORMAL, getLayerSet(LAYERS.SHAPE, self.nickname_group)
+        )
+
+    @cached_property
+    def nickname_pinlines_shape(self) -> ArtLayer | None:
+        return getLayer(LAYERS.NICKNAME, self.nickname_pinlines_group)
+
+    @cached_property
     def enabled_shapes(self) -> list[ArtLayer | LayerSet | None]:
-        return [*super().enabled_shapes, self.pt_shape, self.bottom_curve_shape]
+        shapes = super().enabled_shapes
+        if self.is_nickname:
+            shapes.append(self.nickname_pinlines_shape)
+        shapes.extend((self.pt_shape, self.bottom_curve_shape))
+        return shapes
 
     # endregion Shapes
 

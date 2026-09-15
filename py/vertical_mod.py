@@ -346,6 +346,10 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
     def class_group(self) -> LayerSet | None:
         return self.vertical_right_group
 
+    @cached_property
+    def nickname_pinlines_group(self) -> LayerSet | None:
+        return getLayerSet(LAYERS.NICKNAME, (self.pinlines_group, LAYERS.SHAPE))
+
     # endregion Groups
 
     # region Reference layers
@@ -466,12 +470,6 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
             ):
                 layers.append(layer)
 
-            # Add nickname pinlines if required
-            if self.is_nickname and (
-                layer := getLayerSet(LAYERS.NICKNAME, _shape_group)
-            ):
-                layers.append(layer)
-
             # Typeline
             if layer := getLayer(
                 LAYERS.TALL if self.has_extra_textbox else LAYER_NAMES.VERTICAL,
@@ -514,6 +512,13 @@ class VerticalMod(BorderlessVectorTemplate, CaseMod, ClassMod, SagaMod):
         if self.is_vertical_layout:
             return None
         return super().textbox_transform_front_addition_shape
+
+    @cached_property
+    def enabled_shapes(self) -> list[ArtLayer | LayerSet | None]:
+        shapes = super().enabled_shapes
+        if self.is_nickname:
+            shapes.append(self.nickname_pinlines_group)
+        return shapes
 
     # endregion Shapes
 
