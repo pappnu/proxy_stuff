@@ -1,9 +1,10 @@
+import re
 from contextlib import AbstractContextManager
 from types import TracebackType
 
 from photoshop.api._artlayer import ArtLayer
 from photoshop.api._layerSet import LayerSet
-from photoshop.api.enumerations import ElementPlacement, RasterizeType
+from photoshop.api.enumerations import ElementPlacement, LayerKind, RasterizeType
 
 from src.helpers.bounds import (
     LayerDimensions,
@@ -12,6 +13,8 @@ from src.helpers.bounds import (
 )
 
 from ..helpers import rasterize_layer_style
+
+_digit_regex = re.compile(r"\d")
 
 
 def get_layer_dimensions_via_rasterization(
@@ -27,6 +30,13 @@ def get_layer_dimensions_via_rasterization(
     dims = get_layer_dimensions(layer_copy)
     layer_copy.remove()
     return dims
+
+
+def is_generated_fill_layer(layer: ArtLayer) -> bool:
+    return bool(
+        layer.kind in (LayerKind.SolidFillLayer, LayerKind.GradientFillLayer)
+        and _digit_regex.search(layer.name)
+    )
 
 
 class TemporaryLayerCopy[T: (ArtLayer, LayerSet)](AbstractContextManager[T]):
